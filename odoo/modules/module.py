@@ -123,6 +123,14 @@ def initialize_sys_path():
     Setup the addons path ``odoo.addons.__path__`` with various defaults
     and explicit directories.
     """
+    # Normalize existing __path__ entries for case-insensitive deduplication.
+    # On Windows, Python sets odoo.addons.__path__ with original filesystem case
+    # (e.g. 'C:\Program Files\...'), but subsequent paths are lowercased via
+    # os.path.normcase(). Without this normalization, the case-sensitive 'not in'
+    # check below would add the same directory twice (e.g. 'server\odoo\addons'
+    # would appear both uppercase and lowercase), causing Odoo to scan it twice.
+    odoo.addons.__path__[:] = [os.path.normcase(p) for p in odoo.addons.__path__]
+
     # hook odoo.addons on data dir
     dd = os.path.normcase(tools.config.addons_data_dir)
     if os.access(dd, os.R_OK) and dd not in odoo.addons.__path__:
