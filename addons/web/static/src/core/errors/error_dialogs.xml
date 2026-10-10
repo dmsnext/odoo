@@ -35,7 +35,7 @@
       <Dialog title="this.constructor.title">
         <div role="alert">
           <p style="white-space: pre-wrap;">
-            Your Odoo session expired. The current page is about to be refreshed.
+            Your Erpiant session expired. The current page is about to be refreshed.
           </p>
         </div>
         <t t-set-slot="footer">

@@ -61,7 +61,7 @@ export class BarcodeDialog extends Component {
             } catch (err) {
                 const errors = {
                     NotFoundError: _t("No device can be found."),
-                    NotAllowedError: _t("Odoo needs your authorization first."),
+                    NotAllowedError: _t("Erpiant needs your authorization first."),
                 };
                 const errorMessage =
                     _t("Could not start scanning. ") + (errors[err.name] || err.message);
