@@ -1370,10 +1370,10 @@ msgstr "Verifica i permessi del browser"
 #. module: web
 #: model_terms:ir.ui.view,arch_db:web.webclient_offline
 msgid ""
-"Check your network connection and come back here. Odoo will load as soon as "
-"you're back online."
+"Check your network connection and come back here. Erpiant will load as soon "
+"as you're back online."
 msgstr ""
-"Verifica la connessione internet e torna qui. Odoo sarà pronto non appena "
+"Verifica la connessione internet e torna qui. Erpiant sarà pronto non appena "
 "tornerai online."
 
 #. module: web
@@ -4618,8 +4618,8 @@ msgstr "Odoo"
 #. module: web
 #. odoo-javascript
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
-msgid "Odoo Client Error"
-msgstr "Errore client Odoo"
+msgid "Client Error"
+msgstr "Errore client"
 
 #. module: web
 #. odoo-javascript
@@ -4636,8 +4636,8 @@ msgstr "Errore Odoo"
 #. module: web
 #. odoo-javascript
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
-msgid "Odoo Network Error"
-msgstr "Errore Odoo Network"
+msgid "Network Error"
+msgstr "Errore di rete"
 
 #. module: web
 #. odoo-javascript
@@ -4659,15 +4659,15 @@ msgstr "Odoo S.A."
 #. module: web
 #. odoo-javascript
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
-msgid "Odoo Server Error"
-msgstr "Errore Odoo Server"
+msgid "Server Error"
+msgstr "Errore del server"
 
 #. module: web
 #. odoo-javascript
 #: code:addons/web/static/src/core/errors/error_dialogs.xml:0
 #: code:addons/web/static/src/public/error_notifications.js:0
-msgid "Odoo Session Expired"
-msgstr "Sessione Odoo scaduta"
+msgid "Session Expired"
+msgstr "Sessione scaduta"
 
 #. module: web
 #. odoo-javascript
@@ -4683,8 +4683,8 @@ msgstr "Logo Odoo"
 #. module: web
 #. odoo-javascript
 #: code:addons/web/static/src/core/barcode/barcode_video_scanner.js:0
-msgid "Odoo needs your authorization first."
-msgstr "Odoo ha bisogno della tua autorizzazione prima."
+msgid "Erpiant needs your authorization first."
+msgstr "Erpiant ha prima bisogno della tua autorizzazione."
 
 #. module: web
 #. odoo-javascript
@@ -7496,9 +7496,9 @@ msgstr ""
 #. odoo-javascript
 #: code:addons/web/static/src/core/errors/error_dialogs.xml:0
 #: code:addons/web/static/src/public/error_notifications.js:0
-msgid "Your Odoo session expired. The current page is about to be refreshed."
+msgid "Your Erpiant session expired. The current page is about to be refreshed."
 msgstr ""
-"La sessione Odoo è scaduta. La pagina corrente sta per essere aggiornata."
+"La sessione Erpiant è scaduta. La pagina corrente sta per essere aggiornata."
 
 #. module: web
 #. odoo-javascript
