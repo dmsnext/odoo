@@ -3623,7 +3623,7 @@ msgstr ""
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
 #, python-format
-msgid "Odoo Client Error"
+msgid "Client Error"
 msgstr ""
 
 #. module: web
@@ -3638,7 +3638,7 @@ msgstr ""
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
 #, python-format
-msgid "Odoo Network Error"
+msgid "Network Error"
 msgstr ""
 
 #. module: web
@@ -3652,7 +3652,7 @@ msgstr ""
 #. odoo-javascript
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
 #, python-format
-msgid "Odoo Server Error"
+msgid "Server Error"
 msgstr ""
 
 #. module: web
@@ -3660,7 +3660,7 @@ msgstr ""
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
 #: code:addons/web/static/src/public/error_notifications.js:0
 #, python-format
-msgid "Odoo Session Expired"
+msgid "Session Expired"
 msgstr ""
 
 #. module: web
@@ -3675,7 +3675,7 @@ msgstr ""
 #. odoo-javascript
 #: code:addons/web/static/src/webclient/barcode/barcode_scanner.js:0
 #, python-format
-msgid "Odoo needs your authorization first."
+msgid "Erpiant needs your authorization first."
 msgstr ""
 
 #. module: web
@@ -6105,7 +6105,7 @@ msgstr ""
 #: code:addons/web/static/src/core/errors/error_dialogs.xml:0
 #: code:addons/web/static/src/public/error_notifications.js:0
 #, python-format
-msgid "Your Odoo session expired. The current page is about to be refreshed."
+msgid "Your Erpiant session expired. The current page is about to be refreshed."
 msgstr ""
 
 #. module: web
