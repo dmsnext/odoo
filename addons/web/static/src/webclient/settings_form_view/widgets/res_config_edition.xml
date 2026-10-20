@@ -4,8 +4,7 @@
         <Setting addLabel="false">
                 <div class="user-heading">
                     <h3 class="px-0">
-                        Odoo <t t-esc="serverVersion"/>
-                        (Community Edition)
+                        Erpiant <t t-esc="serverVersion"/>
                     </h3>
                 </div>
                 <div>
