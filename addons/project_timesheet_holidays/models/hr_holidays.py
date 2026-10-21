@@ -22,10 +22,10 @@ class HolidaysType(models.Model):
                 "('project_id', '!=', False),"
                 "('company_id', 'in', [False, company_id])]")
 
-    @api.depends('timesheet_task_id', 'timesheet_project_id')
+    @api.depends('timesheet_task_id', 'timesheet_project_id', 'time_type')
     def _compute_timesheet_generate(self):
         for leave_type in self:
-            leave_type.timesheet_generate = not leave_type.company_id or (leave_type.timesheet_task_id and leave_type.timesheet_project_id)
+            leave_type.timesheet_generate = leave_type.time_type != 'other' and (not leave_type.company_id or (leave_type.timesheet_task_id and leave_type.timesheet_project_id))
 
     @api.depends('company_id')
     def _compute_timesheet_project_id(self):
@@ -70,9 +70,10 @@ class Holidays(models.Model):
         """
         vals_list = []
         leave_ids = []
-        calendar_leaves_data = self.env['resource.calendar.leaves']._read_group([('holiday_id', 'in', self.ids)], ['holiday_id'], ['id:array_agg'])
+        leaves_with_active_employee = self.filtered(lambda l: l.employee_id.active)
+        calendar_leaves_data = self.env['resource.calendar.leaves']._read_group([('holiday_id', 'in', leaves_with_active_employee.ids)], ['holiday_id'], ['id:array_agg'])
         mapped_calendar_leaves = {leave: calendar_leave_ids[0] for leave, calendar_leave_ids in calendar_leaves_data}
-        for leave in self:
+        for leave in leaves_with_active_employee:
             if not leave.holiday_status_id.timesheet_generate:
                 continue
 

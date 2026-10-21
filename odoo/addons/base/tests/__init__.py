@@ -21,6 +21,7 @@ from . import test_i18n
 from . import test_image
 from . import test_avatar_mixin
 from . import test_ir_actions
+from . import test_ir_asset
 from . import test_ir_attachment
 from . import test_ir_cron
 from . import test_ir_filters
@@ -33,6 +34,7 @@ from . import test_ir_sequence
 from . import test_ir_sequence_date_range
 from . import test_ir_embedded_actions
 from . import test_ir_default
+from . import test_logging
 from . import test_mail
 from . import test_menu
 from . import test_mimetypes
@@ -77,3 +79,4 @@ from . import test_config_parameter
 from . import test_ir_module_category
 from . import test_configmanager
 from . import test_num2words_ar
+from . import test_num2words_es

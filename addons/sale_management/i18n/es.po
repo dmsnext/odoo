@@ -7,27 +7,24 @@
 # Larissa Manderfeld, 2024
 #
 # "Larissa Manderfeld (lman)" <lman@odoo.com>, 2025.
+# Weblate <noreply-mt-weblate@weblate.org>, 2025.
+# "Noemi Pla Garcia (nopl)" <nopl@odoo.com>, 2026.
 msgid ""
 msgstr ""
 "Project-Id-Version: Odoo Server 18.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-09-25 08:39+0000\n"
-"PO-Revision-Date: 2025-08-25 10:09+0000\n"
-"Last-Translator: \"Larissa Manderfeld (lman)\" <lman@odoo.com>\n"
+"POT-Creation-Date: 2026-04-10 18:37+0000\n"
+"PO-Revision-Date: 2026-09-23 08:33+0000\n"
+"Last-Translator: \"Noemi Pla Garcia (nopl)\" <nopl@odoo.com>\n"
 "Language-Team: Spanish <https://translate.odoo.com/projects/odoo-18/"
 "sale_management/es/>\n"
 "Language: es\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: \n"
-"Plural-Forms: nplurals=3; plural=(n == 1) ? 0 : ((n != 0 && n % 1000000 == 0)"
-" ? 1 : 2);\n"
-"X-Generator: Weblate 5.12.2\n"
-
-#. module: sale_management
-#: model_terms:ir.ui.view,arch_db:sale_management.report_saleorder_document_inherit_sale_management
-msgid "1.5"
-msgstr "1,5"
+"Plural-Forms: nplurals=3; plural=(n == 1) ? 0 : ((n != 0 && n % 1000000 == "
+"0) ? 1 : 2);\n"
+"X-Generator: Weblate 2026.8.1\n"
 
 #. module: sale_management
 #: model_terms:ir.ui.view,arch_db:sale_management.sale_order_portal_content_inherit_sale_management
@@ -129,13 +126,13 @@ msgid ""
 "Conversion between Units of Measure can only occur if they belong to the "
 "same category. The conversion will be made based on the ratios."
 msgstr ""
-"La conversión entre las unidades de medidas sólo puede ocurrir si pertenecen"
-" a la misma categoría. La conversión se basará en los índices establecidos."
+"La conversión entre las unidades de medidas sólo puede ocurrir si pertenecen "
+"a la misma categoría. La conversión se basará en los índices establecidos."
 
 #. module: sale_management
 #: model_terms:ir.ui.view,arch_db:sale_management.res_config_settings_view_form
 msgid "Create standardized offers with default products"
-msgstr "Cree plantillas de ofertas con productos por defecto"
+msgstr "Cree ofertas estandarizadas con productos predeterminados"
 
 #. module: sale_management
 #: model_terms:ir.actions.act_window,help:sale_management.sale_order_template_action
@@ -212,8 +209,7 @@ msgstr "Tipo de pantalla"
 #: code:addons/sale_management/models/digest.py:0
 msgid "Do not have access, skip this data for user's digest email"
 msgstr ""
-"No tiene acceso, salte esta información para el resumen del correo "
-"electrónico del usuario"
+"Si no tiene acceso, omita esta información del correo de resumen del usuario"
 
 #. module: sale_management
 #: model_terms:ir.ui.view,arch_db:sale_management.report_saleorder_document_inherit_sale_management
@@ -224,14 +220,13 @@ msgstr "Patatas fritas extra"
 #: model:ir.model.constraint,message:sale_management.constraint_sale_order_template_line_non_accountable_fields_null
 msgid "Forbidden product, quantity and UoM on non-accountable sale quote line"
 msgstr ""
-"Producto, cantidad y UdM prohibidos en la línea de presupuesto de la venta "
-"no contabilizada"
+"No se permite asignar un producto, cantidad o unidad de medida en una línea "
+"no facturable del presupuesto de venta"
 
 #. module: sale_management
 #: model:ir.model.fields,help:sale_management.field_sale_order_option__sequence
 msgid "Gives the sequence order when displaying a list of optional products."
-msgstr ""
-"Da el orden de secuencia al mostrar una lista de productos opcionales."
+msgstr "Da el orden de secuencia al mostrar una lista de productos opcionales."
 
 #. module: sale_management
 #: model:ir.model.fields,help:sale_management.field_sale_order_template_line__sequence
@@ -280,7 +275,7 @@ msgstr "Diario de facturación"
 #. module: sale_management
 #: model:ir.model.fields,field_description:sale_management.field_digest_digest__kpi_all_sale_total_value
 msgid "Kpi All Sale Total Value"
-msgstr "KPI Valor total de venta total"
+msgstr "KPI del valor total de todas las ventas"
 
 #. module: sale_management
 #: model:ir.model.fields,field_description:sale_management.field_sale_order_option__write_uid
@@ -325,8 +320,7 @@ msgstr "Nota"
 #. module: sale_management
 #: model:ir.model.fields,help:sale_management.field_sale_order_template__number_of_days
 msgid "Number of days for the validity date computation of the quotation"
-msgstr ""
-"Número de días para el cálculo de la la fecha de validez del presupuesto"
+msgstr "Número de días para el cálculo de la fecha de validez del presupuesto"
 
 #. module: sale_management
 #: model:ir.model.fields,field_description:sale_management.field_sale_order_template__require_payment
@@ -466,8 +460,7 @@ msgid ""
 "Request an online payment to the customer in order to confirm orders "
 "automatically."
 msgstr ""
-"Solicite pago en línea al cliente para confirmar los pedidos "
-"automáticamente."
+"Solicite pago en línea al cliente para confirmar los pedidos automáticamente."
 
 #. module: sale_management
 #: model:ir.model,name:sale_management.model_sale_order_option
@@ -557,8 +550,8 @@ msgid ""
 "Terms set here will show up instead if you select this quotation template."
 msgstr ""
 "El administrador puede establecer términos y condiciones por defecto en "
-"Ajustes de Ventas. Se mostrarán los términos establecidos aquí si selecciona"
-" esta plantilla de presupuesto."
+"Ajustes de Ventas. Se mostrarán los términos establecidos aquí si selecciona "
+"esta plantilla de presupuesto."
 
 #. module: sale_management
 #: model:ir.model.fields,help:sale_management.field_sale_order_template__prepayment_percent
@@ -572,8 +565,8 @@ msgid ""
 "This e-mail template will be sent on confirmation. Leave empty to send "
 "nothing."
 msgstr ""
-"Se enviará esta plantilla de correo electrónico como confirmación. Déjela en"
-" blanco si no quiere enviar nada."
+"Esta plantilla de correo electrónico se enviará tras la confirmación. Deje "
+"el campo vacío para no enviar nada."
 
 #. module: sale_management
 #: model:ir.model.fields,help:sale_management.field_sale_order_option__is_present
@@ -594,7 +587,7 @@ msgstr "Consejo: Odoo admite productos configurables"
 #: model:digest.tip,name:sale_management.digest_tip_sale_management_1
 #: model_terms:digest.tip,tip_description:sale_management.digest_tip_sale_management_1
 msgid "Tip: Sell or buy products in bulk with matrixes"
-msgstr "Consejo: Vender o comprar productos al por mayor con matrices"
+msgstr "Consejo: venda o compre productos al por mayor mediante matrices"
 
 #. module: sale_management
 #: model:ir.model.fields,field_description:sale_management.field_sale_order_option__price_unit
@@ -624,12 +617,16 @@ msgstr "UdM"
 #: model_terms:ir.actions.act_window,help:sale_management.sale_order_template_action
 msgid ""
 "Use templates to create polished, professional quotes in minutes.\n"
-"                Send these quotes by email and let your customers sign online.\n"
+"                Send these quotes by email and let your customers sign "
+"online.\n"
 "                Use cross-selling and discounts to push and boost your sales."
 msgstr ""
-"Use plantillas para crear presupuestos profesionales y atractivos en minutos.\n"
-"                Envíe estos presupuestos por correo electrónico y deje que sus clientes firmen en línea.\n"
-"                Utilice las ventas cruzadas y los descuentos para impulsar y aumentar sus ventas."
+"Utilice plantillas para crear presupuestos profesionales y limpios en "
+"minutos.\n"
+"                Envíe estos presupuestos por correo electrónico y permita "
+"que sus clientes firmen en línea.\n"
+"                Utilice la venta cruzada y los descuentos para impulsar y "
+"aumentar sus ventas."
 
 #. module: sale_management
 #. odoo-python
@@ -644,34 +641,64 @@ msgid ""
 "You cannot change the type of a sale quote line. Instead you should delete "
 "the current line and create a new line of the proper type."
 msgstr ""
-"No puede cambiar la línea del presupuesto de venta. En vez de eso, debería "
-"borrar la línea actual y crear una nueva línea del tipo correcto."
+"No se puede cambiar el tipo de una línea de presupuesto de venta. En vez de "
+"eso, debe eliminar la línea actual y crear una nueva línea del tipo adecuado."
 
 #. module: sale_management
 #. odoo-python
 #: code:addons/sale_management/models/sale_order.py:0
 msgid ""
-"Your quotation contains products from company %(product_company)s whereas your quotation belongs to company %(quote_company)s. \n"
-" Please change the company of your quotation or remove the products from other companies (%(bad_products)s)."
+"Your quotation contains products from company %(product_company)s whereas "
+"your quotation belongs to company %(quote_company)s. \n"
+" Please change the company of your quotation or remove the products from "
+"other companies (%(bad_products)s)."
 msgstr ""
-"Su presupuesto contiene productos de la compañía %(product_company)s, mientras que el mismo pertenece a la compañía %(quote_company)s.\n"
-" Cambie la compañía de su presupuesto o elimine los productos de otras compañías (%(bad_products)s)."
-
-#. module: sale_management
-#. odoo-python
-#: code:addons/sale_management/models/sale_order_template.py:0
-msgid "Your template cannot contain products from multiple companies."
-msgstr "Su plantilla no puede contener productos de varias compañías."
+"Su presupuesto contiene productos de la compañía %(product_company)s, "
+"mientras que el mismo pertenece a la compañía %(quote_company)s.\n"
+" Cambie la compañía de su presupuesto o elimine los productos de otras "
+"compañías (%(bad_products)s)."
 
 #. module: sale_management
 #. odoo-python
 #: code:addons/sale_management/models/sale_order_template.py:0
 msgid ""
-"Your template contains products from company %(product_company)s whereas your template belongs to company %(template_company)s. \n"
-" Please change the company of your template or remove the products from other companies."
+"Your template belongs to company %(template_company)s but contains products "
+"from company (%(product_company)s) that are not accessible to %"
+"(template_company)s.\n"
+"Please change the company of your template or remove the products from other "
+"companies."
 msgstr ""
-"Su plantilla contiene productos de la compañía %(product_company)s, mientras que su plantilla pertenece a la compañía %(template_company)s.\n"
-" Cambie la compañía de su plantilla o elimine los productos de otras compañías."
+"Tu plantilla pertenece a la empresa %(template_company)s, pero contiene "
+"productos de la empresa (%(product_company)s) a los que %(template_company)s "
+"no tiene acceso.\n"
+"Cambia la empresa de tu plantilla o elimina los productos de otras empresas."
+
+#. module: sale_management
+#. odoo-python
+#: code:addons/sale_management/models/sale_order_template.py:0
+msgid ""
+"Your template belongs to company %(template_company)s but contains products "
+"from other companies (%(product_company)s) that are not accessible to %"
+"(template_company)s.\n"
+"Please change the company of your template or remove the products from other "
+"companies."
+msgstr ""
+"Tu plantilla pertenece a la empresa %(template_company)s, pero contiene "
+"productos de otras empresas (%(product_company)s) a los que %"
+"(template_company)s no tiene acceso.\n"
+"Cambia la empresa de tu plantilla o elimina los productos de otras empresas."
+
+#. module: sale_management
+#. odoo-python
+#: code:addons/sale_management/models/sale_order_template.py:0
+msgid ""
+"Your template cannot contain products from specific companies if it's shared "
+"between companies. Please restrict the template access, or remove those "
+"products."
+msgstr ""
+"Tu plantilla no puede contener productos de empresas específicas si se "
+"comparte entre empresas. Restringe el acceso a la plantilla o elimina esos "
+"productos."
 
 #. module: sale_management
 #: model_terms:ir.ui.view,arch_db:sale_management.sale_order_template_view_form
@@ -682,3 +709,20 @@ msgstr "días"
 #: model_terms:ir.ui.view,arch_db:sale_management.sale_order_template_view_form
 msgid "e.g. Standard Consultancy Package"
 msgstr "p. ej. Paquete estándar de consultoría"
+
+#~ msgid "1.5"
+#~ msgstr "1,5"
+
+#~ msgid "Your template cannot contain products from multiple companies."
+#~ msgstr "Su plantilla no puede contener productos de varias compañías."
+
+#~ msgid ""
+#~ "Your template contains products from company %(product_company)s whereas "
+#~ "your template belongs to company %(template_company)s. \n"
+#~ " Please change the company of your template or remove the products from "
+#~ "other companies."
+#~ msgstr ""
+#~ "Su plantilla contiene productos de la compañía %(product_company)s, "
+#~ "mientras que su plantilla pertenece a la compañía %(template_company)s.\n"
+#~ " Cambie la compañía de su plantilla o elimine los productos de otras "
+#~ "compañías."

@@ -166,8 +166,10 @@ class Manager(Thread):
                 _logger.exception("Interface %s could not be started", str(interface))
 
         # Set scheduled actions
-        schedule and schedule.every().day.at("00:00").do(helpers.get_certificate_status)
-        schedule and schedule.every().day.at("00:00").do(helpers.reset_log_level)
+        if schedule:
+            schedule.every().day.at("00:00").do(helpers.get_certificate_status)
+            schedule.every().day.at("00:00").do(helpers.reset_log_level)
+            schedule.every().day.at("00:00").do(helpers.check_git_branch)
 
         # Set up the websocket connection
         if self.server_url and iot_client.iot_channel:
@@ -175,7 +177,7 @@ class Manager(Thread):
         # Check every 3 seconds if the list of connected devices has changed and send the updated
         # list to the connected DB.
         self.previous_iot_devices = []
-        while 1:
+        while True:
             try:
                 if self._get_changes_to_send():
                     self.send_alldevices(iot_client)

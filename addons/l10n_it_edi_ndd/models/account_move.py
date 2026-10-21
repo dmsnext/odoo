@@ -68,12 +68,18 @@ class AccountMove(models.Model):
             move.l10n_it_document_type = document_type.get(move._l10n_it_edi_get_document_type())
 
     def _l10n_it_edi_get_document_type(self):
+        """ If the user has selected a document type, generally use that.
+            If the user has selected (the default) TD01 and the partner has no complete address
+            then we can't issue a TD01 invoice - but if it's possible to issue a simplified invoice,
+            then switch automatically to the TD07.
+        """
         # EXTENDS 'l10n_it_edi'
         self.ensure_one()
-
-        if self.l10n_it_document_type:
-            return self.l10n_it_document_type.code
-        return super()._l10n_it_edi_get_document_type()
+        if not self.l10n_it_document_type.code:
+            return super()._l10n_it_edi_get_document_type()
+        if self.l10n_it_document_type.code == 'TD01' and super()._l10n_it_edi_get_document_type() == 'TD07':
+            self.l10n_it_document_type = self.env.ref('l10n_it_edi_ndd.l10n_it_document_type_07')
+        return self.l10n_it_document_type.code
 
     def _l10n_it_edi_get_values(self, pdf_values=None):
         # EXTENDS 'l10n_it_edi'
@@ -99,10 +105,26 @@ class AccountMove(models.Model):
         if not res:
             return
         self = res
+        tree = data['xml_tree']
 
         #l10n_it_payment_method
-        if payment_method := get_text(data['xml_tree'], '//DatiPagamento/DettaglioPagamento/ModalitaPagamento'):
+        if payment_method := get_text(tree, '//DatiPagamento/DettaglioPagamento/ModalitaPagamento'):
             if payment_method in self.env['account.payment.method.line']._get_l10n_it_payment_method_selection_code():
                 self.l10n_it_payment_method = payment_method
 
+        document_type_code = get_text(tree, '//DatiGeneraliDocumento/TipoDocumento')
+        if document_type := self.env['l10n_it.document.type'].search([('code', '=', document_type_code)]):
+            self.l10n_it_document_type = document_type
+
         return self
+
+    def _l10n_it_edi_base_export_check(self):
+        """ Warnings can be ignored by setting `l10n_it_document_type == 'TD07'` """
+        # EXTENDS 'l10n_it_edi'
+        errors = super()._l10n_it_edi_base_export_check()
+        simplified_moves = self.filtered(lambda move:
+            move._l10n_it_edi_is_simplified_document_type(move.l10n_it_document_type.code)
+        )
+        errors.update(simplified_moves._l10n_it_edi_is_simplified_checks())
+        errors.update(simplified_moves.commercial_partner_id._l10n_it_edi_export_check(['partner_simplified']))
+        return errors

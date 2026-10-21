@@ -45,7 +45,7 @@ class TestAccountJournal(AccountTestInvoicingCommon):
         with self.assertRaisesRegex(UserError, "entries linked to it"), self.cr.savepoint():
             self.company_data['default_journal_sale'].company_id = self.company_data_2['company']
 
-    def test_account_control_create_journal_entry(self):
+    def test_account_control_post_journal_entry(self):
         move_vals = {
             'line_ids': [
                 (0, 0, {
@@ -66,11 +66,11 @@ class TestAccountJournal(AccountTestInvoicingCommon):
         # Should fail because 'default_account_expense' is not allowed.
         self.company_data['default_journal_misc'].account_control_ids |= self.company_data['default_account_revenue']
         with self.assertRaises(UserError), self.cr.savepoint():
-            self.env['account.move'].create(move_vals)
+            self.env['account.move'].create(move_vals).action_post()
 
         # Should be allowed because both accounts are accepted.
         self.company_data['default_journal_misc'].account_control_ids |= self.company_data['default_account_expense']
-        self.env['account.move'].create(move_vals)
+        self.env['account.move'].create(move_vals).action_post()
 
     def test_account_control_existing_journal_entry(self):
         self.env['account.move'].create({
@@ -418,3 +418,99 @@ class TestAccountJournalAlias(AccountTestInvoicingCommon, MailCommon):
             msg_id='<test-account-move-alias-id>',
         )
         self.assertTrue(self.env['account.move'].search([('invoice_source_email', '=', 'company_2_user@test.com')]))
+
+    def test_alias_uniqueness_without_domain(self):
+        """Ensure alias_name is unique even if alias_domain is not defined."""
+        default_account = self.env['account.account'].search(
+            domain=[('deprecated', '=', False), ('account_type', 'in', ('income', 'income_other'))],
+            limit=1,
+        )
+        with Form(self.env['account.journal']) as journal_form:
+            journal_form.type = 'sale'
+            journal_form.code = 'A'
+            journal_form.name = 'Test Journal 1'
+            journal_form.default_account_id = default_account
+            journal_1 = journal_form.save()
+        with Form(self.env['account.journal']) as journal_form:
+            journal_form.type = 'sale'
+            journal_form.code = 'B'
+            journal_form.name = 'Test Journal 2'
+            journal_form.default_account_id = default_account
+            journal_2 = journal_form.save()
+        self.assertNotEqual(journal_1.alias_id.alias_name, journal_2.alias_id.alias_name)
+
+    def test_payment_method_lines_on_recompute(self):
+        """
+        Test that existing payment method lines are not removed during their computation.
+        A payment method line should be created for each of the default payment methods that has no line yet.
+        """
+        bank_journal = self.company_data['default_journal_bank']
+        outstanding_receipt_account = self.env['account.chart.template'].ref('account_journal_payment_debit_account_id')
+        outstanding_payment_account = self.env['account.chart.template'].ref('account_journal_payment_credit_account_id')
+        deferred_expense_account = self.company_data['default_account_deferred_expense']
+
+        inbound_method_lines = bank_journal.inbound_payment_method_line_ids
+        inbound_method_lines_names = inbound_method_lines.mapped('name')
+        inbound_method_lines[0].payment_account_id = outstanding_receipt_account
+
+        outbound_method_lines = bank_journal.outbound_payment_method_line_ids
+        outbound_method_lines[0].payment_account_id = outstanding_payment_account
+        new_outbound_payment_line = outbound_method_lines[0].copy({'payment_account_id': deferred_expense_account.id})
+        bank_journal.outbound_payment_method_line_ids = [Command.link(new_outbound_payment_line.id)]
+        outbound_method_lines_names = bank_journal.outbound_payment_method_line_ids.mapped('name')
+
+        # Set currency_id to trigger the compute of {in,out}bound_payment_method_line_ids
+        bank_journal.currency_id = self.company_data['currency']
+
+        # Existing payment method lines should stay unchanged
+        self.assertRecordValues(bank_journal.inbound_payment_method_line_ids, [
+            {
+                'name': name,
+                'payment_account_id': outstanding_receipt_account.id if index == 0 else False,
+            } for index, name in enumerate(inbound_method_lines_names)
+        ])
+        self.assertRecordValues(bank_journal.outbound_payment_method_line_ids, [
+            {
+                'name': name,
+                'payment_account_id': (
+                    outstanding_payment_account.id if index == 0 else (
+                        deferred_expense_account.id if index == len(outbound_method_lines_names) - 1 else False
+                    )
+                ),
+            } for index, name in enumerate(outbound_method_lines_names)
+        ])
+
+        # Remove all payment method lines
+        bank_journal.inbound_payment_method_line_ids = [Command.clear()]
+        bank_journal.outbound_payment_method_line_ids = [Command.clear()]
+
+        # Trigger the compute
+        bank_journal.currency_id = self.company_data['currency']
+
+        # Payment method lines should be created for the default payment methods
+        default_inbound_methods = bank_journal._default_inbound_payment_methods()
+        default_outbound_methods = bank_journal._default_outbound_payment_methods()
+        self.assertRecordValues(bank_journal.inbound_payment_method_line_ids, [
+            {
+                'name': inbound_method.name,
+                'payment_account_id': False,
+            } for inbound_method in default_inbound_methods
+        ])
+        self.assertRecordValues(bank_journal.outbound_payment_method_line_ids, [
+            {
+                'name': outbound_method.name,
+                'payment_account_id': False,
+            } for outbound_method in default_outbound_methods
+        ])
+
+    def test_new_purchase_journal_gets_default_account(self):
+        journal = self.env['account.journal'].create({
+            'name': 'Test Purchase',
+            'type': 'purchase',
+            'code': 'TPUR',
+        })
+        ProductCategory = self.env['product.category'].with_company(journal.company_id)
+        self.assertEqual(
+            journal.default_account_id,
+            ProductCategory._fields['property_account_expense_categ_id'].get_company_dependent_fallback(ProductCategory),
+        )

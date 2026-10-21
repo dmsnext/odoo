@@ -1,6 +1,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from datetime import datetime
+from functools import partial
 from unittest.mock import patch
 
 from odoo.exceptions import UserError, ValidationError
@@ -101,6 +102,59 @@ class TestWebsiteSaleCart(BaseUsersCommon, ProductAttributesCommon, WebsiteSaleC
             # service_tracking 'no' should not raise error
             with MockRequest(self.env, website=website_prevent_zero_price):
                 self.WebsiteSaleController.cart_update_json(product_id=product_service.id, add_qty=1)
+
+    def test_zero_price_after_pricelist_recompute_blocks_payment(self):
+        """A cart line whose price becomes 0 after a pricelist recompute (e.g.
+        the customer's country resolves a country-group pricelist that prices the
+        product at 0) must not be payable when `prevent_zero_price_sale` is set.
+        """
+        self.website.prevent_zero_price_sale = True
+        zero_pricelist = self._create_pricelist(item_ids=[Command.create({
+            'applied_on': '1_product',
+            'product_tmpl_id': self.product.product_tmpl_id.id,
+            'compute_price': 'fixed',
+            'fixed_price': 0.0,
+        })])
+
+        website = self.website.with_user(self.public_user)
+        with MockRequest(website.env, website=website) as request:
+            order = self._create_so(access_token='test_token')
+            self.assertEqual(order.order_line.price_unit, self.product.list_price)
+            self.assertFalse(order._get_zero_priced_lines())
+            self.assertTrue(order._is_cart_ready())
+
+            order._cart_update_pricelist(pricelist_id=zero_pricelist.id)
+            self.assertEqual(order.order_line.price_unit, 0.0)
+
+            self.assertEqual(order._get_zero_priced_lines(), order.order_line)
+            self.assertFalse(order._is_cart_ready())
+            with self.assertRaises(ValidationError):
+                PaymentPortal().shop_payment_transaction(order.id, order.access_token)
+
+            # Reaching a checkout step redirects back to the cart with a warning
+            # instead of letting the customer proceed to a payment they cannot
+            # complete.
+            request.session['sale_order_id'] = order.id
+            redirection = self.WebsiteSaleController.shop_checkout()
+            self.assertTrue(redirection.location.endswith('/shop/cart'))
+            self.assertTrue(order.shop_warning)
+            self.assertTrue(order.order_line.shop_warning)
+
+    def test_zero_priced_delivery_line_does_not_block_payment(self):
+        """A free (0-priced) delivery line must not be treated as a forbidden
+        zero-priced product when `prevent_zero_price_sale` is set.
+        """
+        self.website.prevent_zero_price_sale = True
+        with MockRequest(self.env, website=self.website):
+            order = self._create_so()
+            order.set_delivery_line(self.free_delivery, 0.0)
+            delivery_line = order.order_line.filtered('is_delivery')
+            self.assertTrue(delivery_line)
+            self.assertEqual(delivery_line.price_unit, 0.0)
+
+            # The free delivery line must not be flagged as a zero-priced product.
+            self.assertFalse(order._get_zero_priced_lines())
+            self.assertTrue(order._is_cart_ready())
 
     def test_update_cart_before_payment(self):
         website = self.website.with_user(self.public_user)
@@ -312,20 +366,73 @@ class TestWebsiteSaleCart(BaseUsersCommon, ProductAttributesCommon, WebsiteSaleC
             ]
         })
         no_variant_ptavs = product_no_variants.attribute_line_ids.product_template_value_ids
+        no_variant_ptav = no_variant_ptavs[0]
+        add_one = partial(
+            self.empty_cart._cart_update,
+            product_id=product_no_variants.product_variant_id.id,
+            add_qty=1,
+        )
         self.assertEqual(len(self.empty_cart.order_line), 0)
-        self.empty_cart._cart_update(
-            product_id=product_no_variants.product_variant_id.id,
-            add_qty=1,
-            no_variant_attribute_value_ids=no_variant_ptavs[0].ids,
-        )
+
+        add_one(no_variant_attribute_value_ids=no_variant_ptav.ids)
         self.assertEqual(len(self.empty_cart.order_line), 1)
-        self.empty_cart._cart_update(
-            product_id=product_no_variants.product_variant_id.id,
-            add_qty=1,
-            no_variant_attribute_value_ids=no_variant_ptavs[0].ids,
-        )
+
+        add_one(no_variant_attribute_value_ids=no_variant_ptav.ids)
         self.assertEqual(len(self.empty_cart.order_line), 1)
         self.assertEqual(self.empty_cart.order_line.product_uom_qty, 2)
+
+        # Providing `no_variant_attribute_value_ids` should be optional if there's only 1 value...
+        product_no_variants.attribute_line_ids.value_ids = self.no_variant_attribute.value_ids[0]
+        add_one(no_variant_attribute_value_ids=[])
+        self.assertEqual(len(self.empty_cart.order_line), 1)
+        self.assertEqual(self.empty_cart.order_line.product_uom_qty, 3)
+
+        # ...except if it's a multi-checkbox attribute, making the value optional
+        self.no_variant_attribute.display_type = 'multi'
+        add_one(no_variant_attribute_value_ids=[])
+        self.assertEqual(len(self.empty_cart.order_line), 2)
+        self.assertEqual(self.empty_cart.order_line.mapped('product_uom_qty'), [3, 1])
+
+        add_one(no_variant_attribute_value_ids=no_variant_ptav.ids)
+        self.assertEqual(len(self.empty_cart.order_line), 2)
+        self.assertEqual(self.empty_cart.order_line.mapped('product_uom_qty'), [4, 1])
+
+    def test_cart_new_pricelist_from_geoip(self):
+        """Check that, when adding a new partner to a website order, the partner's GeoIP
+        is factored into the pricelist recomputation.
+        """
+        eu_group = self.env.ref('base.europe')
+        not_eu_group = self.env['res.country.group'].create({
+            'name': "Not EU",
+            'country_ids': self.env['res.country'].search([
+                ('id', 'not in', eu_group.country_ids.ids),
+            ]).ids,
+        })
+
+        _pricelist_eu, pricelist_not_eu = self.env['product.pricelist'].create([{
+            'name': "EU",
+            'country_group_ids': eu_group.ids,
+            'website_id': self.website.id,
+            'sequence': 1,
+        }, {
+            'name': "Not EU",
+            'country_group_ids': not_eu_group.ids,
+            'website_id': self.website.id,
+            'sequence': 2,
+        }])
+
+        website = self.website.with_user(self.public_user)
+        with (
+            MockRequest(website.env, website=website, country_code='US'),
+            patch.object(website.__class__, '_get_geoip_country_code', return_value='US'),
+        ):
+            self.WebsiteSaleController.cart_update_json(product_id=self.product.id, add_qty=1)
+            cart = website.sale_get_order()
+            self.assertEqual(cart.pricelist_id, pricelist_not_eu)
+            cart.partner_id = self.env['res.partner'].create({
+                'name': "New Partner",
+            })
+            self.assertEqual(cart.pricelist_id, pricelist_not_eu)
 
     def test_remove_archived_product_line(self):
         """If an order has a line containing an archived product,
@@ -429,3 +536,46 @@ class TestWebsiteSaleCart(BaseUsersCommon, ProductAttributesCommon, WebsiteSaleC
                 quantity=1,
             )
             self.assertEqual(data["quantity"], 1)
+
+    def test_shop_payment_validate_does_not_confirm_empty_order(self):
+        """Test that an order with no order lines is not confirmed by shop_payment_validate."""
+        website = self.env.ref("website.default_website")
+        order = self.env["sale.order"].create(
+            {
+                "partner_id": self.env.ref("base.public_partner").id,
+                "website_id": website.id,
+            }
+        )
+        with MockRequest(self.env, website=website) as request:
+            request.session["sale_order_id"] = order.id
+            request.session["sale_last_order_id"] = order.id
+            try:
+                WebsiteSale().shop_payment_validate()
+            except ValidationError:
+                pass
+
+        self.assertNotEqual(
+            order.state,
+            "sale",
+            "An empty cart should never be confirmed as a sale order.",
+        )
+
+    def test_confirmed_order_in_session_is_not_reassigned(self):
+        partner = self.env['res.partner'].create({'name': 'Customer A'})
+        product = self.env['product.product'].create({
+            'name': 'Test Product',
+            'sale_ok': True,
+            'website_published': True,
+        })
+        order = self.env['sale.order'].create({
+            'partner_id': partner.id,
+            'website_id': self.website.id,
+            'order_line': [Command.create({'product_id': product.id})],
+        })
+        order.action_confirm()
+
+        website = self.website.with_user(self.user_portal)
+        with MockRequest(website.env, website=website, sale_order_id=order.id):
+            website.sale_get_order()
+
+        self.assertEqual(order.partner_id, partner)

@@ -22,6 +22,10 @@ class ThreadController(http.Controller):
                 {"hasReadAccess": False, "hasWriteAccess": False},
                 as_thread=True,
             ).get_result()
+        if not request.env.user._is_internal() or not thread.sudo(False).with_context(
+            allowed_company_ids=[]
+        ).has_access("read"):
+            request_list = []
         return Store(thread, as_thread=True, request_list=request_list).get_result()
 
     @http.route("/mail/thread/messages", methods=["POST"], type="json", auth="user")
@@ -43,6 +47,10 @@ class ThreadController(http.Controller):
 
     @http.route("/mail/partner/from_email", methods=["POST"], type="json", auth="user")
     def mail_thread_partner_from_email(self, emails, additional_values=None):
+        additional_values = {
+            email_normalize(email, strict=False) or email: values
+            for email, values in (additional_values if additional_values else {}).items()
+        }
         partners = [
             {"id": partner.id, "name": partner.name, "email": partner.email}
             for partner in request.env["res.partner"]._find_or_create_from_emails(emails, additional_values)
@@ -95,9 +103,14 @@ class ThreadController(http.Controller):
                     kwargs["partner_emails"], additional_values
                 )
             )
-        if not request.env.user._is_internal():
+        if not request.env.user._is_internal() or not thread.sudo(False).with_context(
+            allowed_company_ids=[]
+        ).has_access(thread._get_mail_message_access(thread.ids, "create")):
             partners = partners & self._filter_message_post_partners(thread, partners)
+            post_data["message_type"] = "comment"
+            post_data["subtype_xmlid"] = "mail.mt_comment"
         post_data["partner_ids"] = partners.ids
+        post_data.setdefault("message_type", "comment")
         return post_data
 
     def _filter_message_post_partners(self, thread, partners):
@@ -134,9 +147,8 @@ class ThreadController(http.Controller):
                 'last_used': datetime.now(),
                 'ids': canned_response_ids,
             })
-        thread = request.env[thread_model]._get_thread_with_access(
-            thread_id, mode=request.env[thread_model]._mail_post_access, **kwargs
-        )
+        post_access = request.env[thread_model].sudo()._get_mail_message_access(thread_id, "create")
+        thread = request.env[thread_model]._get_thread_with_access(thread_id, mode=post_access, **kwargs)
         if not thread:
             raise NotFound()
         if not request.env[thread_model]._get_thread_with_access(thread_id, "write"):

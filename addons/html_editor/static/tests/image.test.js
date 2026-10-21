@@ -1,9 +1,9 @@
 import { expect, test } from "@odoo/hoot";
-import { click, dblclick, press, queryOne, waitFor, waitForNone } from "@odoo/hoot-dom";
+import { click, dblclick, pointerUp, press, queryOne, waitFor, waitForNone } from "@odoo/hoot-dom";
 import { animationFrame } from "@odoo/hoot-mock";
 import { contains } from "@web/../tests/web_test_helpers";
 import { setupEditor } from "./_helpers/editor";
-import { getContent, setContent } from "./_helpers/selection";
+import { getContent, moveSelectionOutsideEditor, setContent } from "./_helpers/selection";
 import { insertText, undo } from "./_helpers/user_actions";
 import { expectElementCount } from "./_helpers/ui_expectations";
 
@@ -260,10 +260,11 @@ test("Can preview an image", async () => {
         <img class="img-fluid test-image" src="${base64Img}">
     `);
     await click("img.test-image");
-    await waitFor(".o-we-toolbar");
+    await expectElementCount(".o-we-toolbar", 1);
     await click(".o-we-toolbar button[name='image_preview']");
     await animationFrame();
-    expect(".o-FileViewer").toHaveCount(1);
+    await expectElementCount(".o-we-toolbar", 0);
+    await expectElementCount(".o-FileViewer", 1);
 });
 
 test("Can transform an image", async () => {
@@ -552,6 +553,20 @@ test("can undo link removing of an image", async () => {
     undo(editor);
     await animationFrame();
     expect(img.parentElement.tagName).toBe("A");
+});
+
+test("image toolbar should open on click even if selection is not in editable", async () => {
+    const { el, editor } = await setupEditor(`
+        <img src="${base64Img}">
+    `);
+
+    el.focus();
+    moveSelectionOutsideEditor();
+    const selectionData = editor.shared.selection.getSelectionData();
+    expect(document.activeElement).toBe(el);
+    expect(selectionData.documentSelectionIsInEditable).toBe(false);
+    await pointerUp("img");
+    await expectElementCount(".o-we-toolbar", 1);
 });
 
 test.tags("desktop");

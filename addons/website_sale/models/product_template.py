@@ -180,7 +180,11 @@ class ProductTemplate(models.Model):
     def write(self, vals):
         # Clear empty ecommerce description content to avoid side-effects on product pages
         # when there is no content to display anyway.
-        if vals.get('description_ecommerce') and is_html_empty(vals['description_ecommerce']):
+        if (
+            (description_ecommerce := vals.get('description_ecommerce'))
+            and is_html_empty(description_ecommerce)
+            and 'media_iframe_video' not in description_ecommerce  # don't remove "empty" video div
+        ):
             vals['description_ecommerce'] = ''
         return super().write(vals)
 
@@ -554,7 +558,13 @@ class ProductTemplate(models.Model):
         })
 
         if combination_info['prevent_zero_price_sale']:
-            combination_info['compare_list_price'] = 0
+            # If price is zero and prevent_zero_price_sale is enabled we don't want to send any
+            # price information regarding the product, including the price before discount
+            combination_info.update({
+                'compare_list_price': 0,
+                'has_discounted_price': False,
+                'list_price': combination_info['price'],
+            })
 
         return combination_info
 
@@ -757,7 +767,11 @@ class ProductTemplate(models.Model):
         if tags:
             if isinstance(tags, str):
                 tags = tags.split(',')
-            domains.append([('product_variant_ids.all_product_tag_ids', 'in', tags)])
+            domains.append([
+                '|',
+                ('product_tag_ids', 'in', tags),
+                ('product_variant_ids.additional_product_tag_ids', 'in', tags),
+            ])
         if min_price:
             domains.append([('list_price', '>=', min_price)])
         if max_price:
@@ -834,7 +848,10 @@ class ProductTemplate(models.Model):
             list_price = self.env['ir.qweb.field.monetary'].value_to_html(
                 combination_info['list_price'], monetary_options
             )
-        if combination_info['compare_list_price']:
+        if (
+            combination_info["compare_list_price"]
+            and combination_info["compare_list_price"] > combination_info["price"]
+        ):
             list_price = self.env['ir.qweb.field.monetary'].value_to_html(
                 combination_info['compare_list_price'], monetary_options
             )
@@ -932,7 +949,7 @@ class ProductTemplate(models.Model):
     def _get_access_action(self, access_uid=None, force_website=False):
         """ Instead of the classic form view, redirect to website if it is published. """
         self.ensure_one()
-        if force_website or self.website_published:
+        if force_website or (self.website_published and self.env.user.share):
             return {
                 "type": "ir.actions.act_url",
                 "url": self.website_url,
@@ -940,3 +957,15 @@ class ProductTemplate(models.Model):
                 "target_type": "public",
             }
         return super()._get_access_action(access_uid=access_uid, force_website=force_website)
+
+    @api.model
+    def _get_mail_message_access(self, res_ids, operation, model_name=None):
+        if (
+            (not model_name or model_name == 'product.template')
+            and operation == 'create'
+            and not self.env.user._is_internal()
+        ):
+            website = self.env['website'].get_current_website()
+            if not website.with_context(website_id=website.id).is_view_active('website_sale.product_comment'):
+                return 'write'
+        return super()._get_mail_message_access(res_ids, operation, model_name=model_name)

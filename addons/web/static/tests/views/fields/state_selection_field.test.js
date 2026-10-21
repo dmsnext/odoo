@@ -1,6 +1,13 @@
-import { expect, test } from "@odoo/hoot";
-import { click, press, queryAll, queryAllTexts, queryFirst } from "@odoo/hoot-dom";
-import { animationFrame } from "@odoo/hoot-mock";
+import {
+    animationFrame,
+    click,
+    expect,
+    press,
+    queryAll,
+    queryAllTexts,
+    queryFirst,
+    test,
+} from "@odoo/hoot";
 import { defineModels, fields, models, mountView, onRpc } from "@web/../tests/web_test_helpers";
 
 class Partner extends models.Model {
@@ -343,8 +350,8 @@ test('StateSelectionField edited by the smart actions "Set kanban state as <stat
     expect(".o_status_red").toHaveCount(1);
     await press(["control", "k"]);
     await animationFrame();
-    expect(`.o_command:contains("Set kanban state as Normal\nALT + D")`).toHaveCount(1);
-    const doneItem = `.o_command:contains("Set kanban state as Done\nALT + G")`;
+    expect(`.o_command:contains("Set kanban state as Normal ALT + D")`).toHaveCount(1);
+    const doneItem = `.o_command:contains("Set kanban state as Done ALT + G")`;
     expect(doneItem).toHaveCount(1);
 
     await click(doneItem);
@@ -353,9 +360,9 @@ test('StateSelectionField edited by the smart actions "Set kanban state as <stat
 
     await press(["control", "k"]);
     await animationFrame();
-    expect(`.o_command:contains("Set kanban state as Normal\nALT + D")`).toHaveCount(1);
-    expect(`.o_command:contains("Set kanban state as Blocked\nALT + F")`).toHaveCount(1);
-    expect(`.o_command:contains("Set kanban state as Done\nALT + G")`).toHaveCount(0);
+    expect(`.o_command:contains("Set kanban state as Normal ALT + D")`).toHaveCount(1);
+    expect(`.o_command:contains("Set kanban state as Blocked ALT + F")`).toHaveCount(1);
+    expect(`.o_command:contains("Set kanban state as Done ALT + G")`).toHaveCount(0);
 });
 
 test("StateSelectionField uses legend_* fields", async () => {
@@ -488,7 +495,7 @@ test("StateSelectionField - hotkey handling when there are more than 3 options a
             ["martine", "Martine"],
         ],
     });
-    Partner._records[0].selection = null;
+    delete Partner._records[0].selection;
 
     await mountView({
         type: "form",
@@ -513,7 +520,8 @@ test("StateSelectionField - hotkey handling when there are more than 3 options a
     await press(["control", "k"]);
     await animationFrame();
 
-    expect(".o_command#o_command_2").toHaveText("Set kanban state as Done\nALT + G", {
+    expect(".o_command#o_command_2").toHaveText("Set kanban state as Done ALT + G", {
+        inline: true,
         message: "hotkey and command are present",
     });
     expect(".o_command#o_command_4").toHaveText("Set kanban state as Martine", {

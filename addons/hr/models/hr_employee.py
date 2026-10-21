@@ -11,7 +11,7 @@ from dateutil.relativedelta import relativedelta
 from markupsafe import Markup
 
 from odoo import api, fields, models, _
-from odoo.exceptions import ValidationError, AccessError
+from odoo.exceptions import ValidationError, AccessError, RedirectWarning
 from odoo.osv import expression
 from odoo.tools import convert, format_date
 
@@ -95,6 +95,7 @@ class HrEmployeePrivate(models.Model):
         domain="[('partner_id', '=', work_contact_id), '|', ('company_id', '=', False), ('company_id', '=', company_id)]",
         groups="hr.group_hr_user",
         tracking=True,
+        copy=False,
         help='Employee bank account to pay salaries')
     permit_no = fields.Char('Work Permit No', groups="hr.group_hr_user", tracking=True)
     visa_no = fields.Char('Visa No', groups="hr.group_hr_user", tracking=True)
@@ -323,6 +324,11 @@ class HrEmployeePrivate(models.Model):
         self.flush_recordset(field_names)
         public = self.env['hr.employee.public'].browse(self._ids)
         public.fetch(field_names)
+        # make sure all related fields from employee are in cache
+        for field_name in field_names:
+            field = self.env['hr.employee.public']._fields[field_name]
+            if field.related and field.related_field.model_name == 'hr.employee':
+                public.mapped(field_name)
         self._copy_cache_from(public, field_names)
 
     def _check_private_fields(self, field_names):
@@ -337,10 +343,15 @@ class HrEmployeePrivate(models.Model):
         # copy them to the cache of self; non-public data will be missing from
         # cache, and interpreted as an access error
         for fname in field_names:
-            values = self.env.cache.get_values(public, public._fields[fname])
+            public_field = public._fields[fname]
+            # only copy the values that are in cache: get_values() skips the
+            # missing ones, which would misalign values with self's ids
+            missing_ids = set(self.env.cache.get_missing_ids(public, public_field))
+            cached = public.browse(id_ for id_ in public._ids if id_ not in missing_ids) if missing_ids else public
+            values = self.env.cache.get_values(cached, public_field)
             if self._fields[fname].translate:
                 values = [(value.copy() if value else None) for value in values]
-            self.env.cache.update_raw(self, self._fields[fname], values)
+            self.env.cache.update_raw(self.browse(cached._ids), self._fields[fname], values)
 
     @api.model
     def _cron_check_work_permit_validity(self):
@@ -373,9 +384,16 @@ class HrEmployeePrivate(models.Model):
     def get_views(self, views, options=None):
         if self.browse().has_access('read'):
             return super().get_views(views, options)
-        res = self.env['hr.employee.public'].get_views(views, options)
-        res['models'].update({'hr.employee': res['models']['hr.employee.public']})
-        return res
+        # returning public employee data would cause a traceback when building
+        # the private employee xml view
+        raise RedirectWarning(
+            message=_(
+            """You are not allowed to access "Employee" (hr.employee) records.
+We can redirect you to the public employee list."""
+            ),
+            action=self.env.ref('hr.hr_employee_public_action').id,
+            button_text=_("Employees profile"),
+        )
 
     @api.model
     def _search(self, domain, offset=0, limit=None, order=None):
@@ -429,8 +447,10 @@ class HrEmployeePrivate(models.Model):
     def _verify_barcode(self):
         for employee in self:
             if employee.barcode:
-                if not (re.match(r'^[A-Za-z0-9]+$', employee.barcode) and len(employee.barcode) <= 18):
-                    raise ValidationError(_("The Badge ID must be alphanumeric without any accents and no longer than 18 characters."))
+                # [!-~] matches every printable ASCII character except the space,
+                # which is excluded because leading or trailing spaces are invisible
+                if not re.fullmatch(r'[!-~]{1,18}', employee.barcode):
+                    raise ValidationError(_("The Badge ID must contain only printable ASCII characters, without spaces, and be no longer than 18 characters."))
 
     @api.constrains('ssnid')
     def _check_ssnid(self):
@@ -674,6 +694,11 @@ class HrEmployeePrivate(models.Model):
         if demo_tag:
             return
         convert.convert_file(self.env, 'hr', 'data/scenarios/hr_scenario.xml', None, mode='init', kind='data')
+
+    def filter_valid(self, checked_date):
+        # A method that can be overridden
+        # to get the valid employees with running contracts.
+        return self
 
     # ---------------------------------------------------------
     # Business Methods

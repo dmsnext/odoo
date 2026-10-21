@@ -7,12 +7,13 @@ import { loadBundle } from "@web/core/assets";
 import { OdooSpreadsheetModel } from "@spreadsheet/model";
 import { OdooDataProvider } from "@spreadsheet/data_sources/odoo_data_provider";
 
-const { formatValue, isDefined, toCartesian, toXC } = helpers;
+const { formatValue, isDefined, toCartesian, addStyleToWorkbookData, toXC } = helpers;
 import {
     isMarkdownViewUrl,
     isMarkdownIrMenuIdUrl,
     isIrMenuXmlUrl,
 } from "@spreadsheet/ir_ui_menu/odoo_menu_link_cell";
+import { getNeutralizedLink } from "./neutralized_link";
 
 /**
  * @typedef {import("@spreadsheet").OdooSpreadsheetModel} OdooSpreadsheetModel
@@ -103,11 +104,12 @@ export async function freezeOdooData(model) {
             const position = { sheetId, col, row };
             const evaluatedCell = model.getters.getEvaluatedCell(position);
             if (containsOdooFunction(cell.content)) {
+                freezeDynamicTable(model, position, data);
                 const pivotId = model.getters.getPivotIdFromPosition(position);
                 if (pivotId && model.getters.getPivotCoreDefinition(pivotId).type !== "ODOO") {
                     continue;
                 }
-                cell.content = evaluatedCell.value.toString();
+                cell.content = toFrozenContent(evaluatedCell);
                 if (evaluatedCell.format) {
                     sheet.formats[xc] = getItemId(evaluatedCell.format, data.formats);
                 }
@@ -124,7 +126,7 @@ export async function freezeOdooData(model) {
                             });
                             sheet.cells[xc] = {
                                 ...sheet.cells[xc],
-                                content: evaluatedCell.value.toString(),
+                                content: toFrozenContent(evaluatedCell),
                             };
                             if (evaluatedCell.format) {
                                 sheet.formats[xc] = getItemId(evaluatedCell.format, data.formats);
@@ -134,7 +136,7 @@ export async function freezeOdooData(model) {
                 }
             }
             if (containsLinkToOdoo(evaluatedCell.link)) {
-                cell.content = evaluatedCell.link.label;
+                cell.content = `[${evaluatedCell.link.label}](${getNeutralizedLink()})`;
             }
         }
         for (const figure of sheet.figures) {
@@ -157,6 +159,14 @@ export async function freezeOdooData(model) {
     data.lists = {};
     exportGlobalFiltersToSheet(model, data);
     return data;
+}
+
+function toFrozenContent(evaluatedCell) {
+    const value = evaluatedCell.value;
+    if (value === "") {
+        return '=""';
+    }
+    return value.toString();
 }
 
 /**
@@ -288,3 +298,37 @@ const backgroundColorPlugin = {
         ctx.restore();
     },
 };
+
+function freezeDynamicTable(model, position, data) {
+    const sheetId = position.sheetId;
+    const coreTable = model.getters.getCoreTable(position);
+    const table = model.getters.getTable(position);
+    if (!table || !coreTable || coreTable?.type !== "dynamic") {
+        return;
+    }
+    const tableZone = table.range.zone;
+    const xc = toXC(tableZone.left, tableZone.top);
+
+    const sheetData = data.sheets.find((sheet) => sheet.id === sheetId);
+    const tableIndex = sheetData?.tables?.findIndex((t) => t.range === xc);
+    if (!sheetData || !sheetData.tables || tableIndex === -1) {
+        return;
+    }
+    sheetData.tables.splice(tableIndex, 1);
+
+    const { left, right, top, bottom } = table.range.zone;
+    for (let row = top; row <= bottom; row++) {
+        for (let col = left; col <= right; col++) {
+            const position = { sheetId, col, row };
+
+            const style = {
+                ...model.getters.getCellTableStyle(position),
+                ...model.getters.getCell(position)?.style,
+            };
+            addStyleToWorkbookData(data, "styles", position, style);
+
+            const border = model.getters.getCellComputedBorder(position);
+            addStyleToWorkbookData(data, "borders", position, border);
+        }
+    }
+}

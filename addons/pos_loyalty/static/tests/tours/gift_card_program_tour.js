@@ -7,6 +7,7 @@ import * as TicketScreen from "@point_of_sale/../tests/tours/utils/ticket_screen
 import * as Order from "@point_of_sale/../tests/tours/utils/generic_components/order_widget_util";
 import * as PaymentScreen from "@point_of_sale/../tests/tours/utils/payment_screen_util";
 import * as ReceiptScreen from "@point_of_sale/../tests/tours/utils/receipt_screen_util";
+import * as Utils from "@point_of_sale/../tests/tours/utils/common";
 
 registry.category("web_tour.tours").add("GiftCardProgramTour1", {
     steps: () =>
@@ -111,17 +112,17 @@ registry.category("web_tour.tours").add("PhysicalGiftCardProgramSaleTour", {
             Chrome.startPoS(),
             Dialog.confirm("Open Register"),
             ProductScreen.addOrderline("Gift Card", "1", "50", "50"),
-            PosLoyalty.createManualGiftCard("test-card-0000", 125),
+            PosLoyalty.createManualGiftCard("test_card_0000", 125),
             ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "125"),
             PosLoyalty.orderTotalIs("125"),
             PosLoyalty.finalizeOrder("Cash", "125"),
             ProductScreen.addOrderline("Gift Card", "1", "50", "50"),
-            PosLoyalty.createManualGiftCard("test-card-0001", 100),
-            PosLoyalty.clickPhysicalGiftCard("test-card-0001"),
+            PosLoyalty.createManualGiftCard("test_card_0001", 100),
+            PosLoyalty.clickPhysicalGiftCard("test_card_0001"),
             ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "100"),
             ProductScreen.addOrderline("Gift Card", "1", "50", "50"),
-            PosLoyalty.createManualGiftCard("new-card-0001", 250),
-            PosLoyalty.clickPhysicalGiftCard("new-card-0001"),
+            PosLoyalty.createManualGiftCard("new_card_0001", 250),
+            PosLoyalty.clickPhysicalGiftCard("new_card_0001"),
             ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "250"),
             PosLoyalty.orderTotalIs("350"),
             PosLoyalty.finalizeOrder("Cash", "350"),
@@ -135,21 +136,21 @@ registry.category("web_tour.tours").add("MultiplePhysicalGiftCardProgramSaleTour
             Dialog.confirm("Open Register"),
             ProductScreen.clickDisplayedProduct("Gift Card"),
             PosLoyalty.clickGiftCardProgram("Gift Cards1"),
-            PosLoyalty.createManualGiftCard("test-card-0000", 125),
+            PosLoyalty.createManualGiftCard("test_card_0000", 125),
             PosLoyalty.clickGiftCardProgram("Gift Cards"),
             ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "125"),
             PosLoyalty.orderTotalIs("125"),
             PosLoyalty.finalizeOrder("Cash", "125"),
             ProductScreen.clickDisplayedProduct("Gift Card"),
             PosLoyalty.clickGiftCardProgram("Gift Cards2"),
-            PosLoyalty.createManualGiftCard("test-card-0001", 125),
+            PosLoyalty.createManualGiftCard("test_card_0001", 125),
             PosLoyalty.clickGiftCardProgram("Gift Cards2"),
             ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "125"),
             PosLoyalty.orderTotalIs("125"),
             PosLoyalty.finalizeOrder("Cash", "125"),
             ProductScreen.clickDisplayedProduct("Gift Card"),
             PosLoyalty.clickGiftCardProgram("Gift Cards3"),
-            PosLoyalty.createManualGiftCard("test-card-0002", 125),
+            PosLoyalty.createManualGiftCard("test_card_0002", 125),
             PosLoyalty.clickGiftCardProgram("Gift Cards3"),
             ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "125"),
             PosLoyalty.orderTotalIs("125"),
@@ -193,7 +194,7 @@ registry.category("web_tour.tours").add("test_physical_gift_card_invoiced", {
             ProductScreen.clickPartnerButton(),
             ProductScreen.clickCustomer("A Test Partner"),
             ProductScreen.addOrderline("Gift Card", "1", "50", "50"),
-            PosLoyalty.createManualGiftCard("test-card-1234", 125),
+            PosLoyalty.createManualGiftCard("test_card_1234", 125),
             ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "125"),
             PosLoyalty.orderTotalIs("125"),
             ProductScreen.clickPayButton(),
@@ -201,5 +202,71 @@ registry.category("web_tour.tours").add("test_physical_gift_card_invoiced", {
             PaymentScreen.clickInvoiceButton(),
             PaymentScreen.clickValidate(),
             ReceiptScreen.isShown(),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_coupon_code_stays_set", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            ProductScreen.clickDisplayedProduct("Gift Card"),
+            PosLoyalty.createManualGiftCard("Card Name", 20),
+            ProductScreen.clickDisplayedProduct("Gift Card"),
+            ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "50"),
+            Utils.refresh(),
+            ProductScreen.clickPayButton(),
+            PaymentScreen.clickPaymentMethod("Cash"),
+            PaymentScreen.clickValidate(),
+            ReceiptScreen.clickNextOrder(),
+            Chrome.endTour(),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_multiple_physical_gift_card_sale", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            ProductScreen.addOrderline("Gift Card", "1", "0", "0"),
+            PosLoyalty.createManualGiftCard("test_card_0000", 125),
+            ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "125"),
+            ProductScreen.addOrderline("Gift Card", "1", "0", "0"),
+            PosLoyalty.createManualGiftCard("test_card_0001", 100),
+            PosLoyalty.finalizeOrder("Cash", "225"),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_physical_gift_card_multiple_programs", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            ProductScreen.clickDisplayedProduct("Gift Card"),
+            PosLoyalty.clickGiftCardProgram("program_a"),
+            PosLoyalty.createManualGiftCard("test_card_0001", 50),
+            PosLoyalty.clickGiftCardProgram("program_a"),
+            ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "50"),
+            ProductScreen.clickDisplayedProduct("Gift Card"),
+            PosLoyalty.clickGiftCardProgram("program_a"),
+            PosLoyalty.createManualGiftCard("test_card_0002", 50),
+            PosLoyalty.clickGiftCardProgram("program_a"),
+            PosLoyalty.orderTotalIs("100.00"),
+            PosLoyalty.finalizeOrder("Cash", "100"),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_physical_gift_card_single_program_twice", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            ProductScreen.clickDisplayedProduct("Gift Card"),
+            PosLoyalty.createManualGiftCard("test_card_0001", 50),
+            ProductScreen.selectedOrderlineHas("Gift Card", "1.00", "50"),
+            ProductScreen.clickDisplayedProduct("Gift Card"),
+            PosLoyalty.createManualGiftCard("test_card_0002", 50),
+            PosLoyalty.orderTotalIs("100.00"),
+            PosLoyalty.finalizeOrder("Cash", "100"),
         ].flat(),
 });

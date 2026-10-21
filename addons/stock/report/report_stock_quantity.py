@@ -11,9 +11,9 @@ class ReportStockQuantity(models.Model):
 
     _depends = {
         'product.product': ['product_tmpl_id'],
-        'product.template': ['type'],
+        'product.template': ['type', 'uom_id'],
         'stock.location': ['parent_path'],
-        'stock.move': ['company_id', 'date', 'location_dest_id', 'location_final_id', 'location_id', 'product_id', 'product_qty', 'state'],
+        'stock.move': ['company_id', 'date', 'location_dest_id', 'location_final_id', 'location_id', 'product_id', 'product_qty', 'state', 'product_uom'],
         'stock.quant': ['company_id', 'location_id', 'product_id', 'quantity'],
         'stock.warehouse': ['view_location_id'],
     }
@@ -52,8 +52,8 @@ WITH
         FROM stock_location sl
         LEFT JOIN stock_warehouse w ON sl.parent_path::text like concat('%%/', w.view_location_id, '/%%')
     ),
-    existing_sm (id, product_id, tmpl_id, product_qty, date, state, company_id, whs_id, whd_id) AS (
-        SELECT m.id, m.product_id, pt.id, m.product_qty, m.date, m.state, m.company_id, source.w_id, dest.w_id
+    existing_sm (id, product_id, tmpl_id, product_qty, quantity, date, state, company_id, whs_id, whd_id) AS (
+        SELECT m.id, m.product_id, pt.id, m.product_qty, m.quantity * (pu.factor / mu.factor), m.date, m.state, m.company_id, source.w_id, dest.w_id
         FROM stock_move m
         LEFT JOIN warehouse_cte source ON source.sl_id = m.location_id
         LEFT JOIN warehouse_cte dest ON dest.sl_id = CASE
@@ -62,20 +62,27 @@ WITH
         END
         LEFT JOIN product_product pp on pp.id=m.product_id
         LEFT JOIN product_template pt on pt.id=pp.product_tmpl_id
+        LEFT JOIN uom_uom mu ON mu.id = m.product_uom
+        LEFT JOIN uom_uom pu ON pu.id = pt.uom_id
         WHERE pt.is_storable = true AND
             (source.w_id IS NOT NULL OR dest.w_id IS NOT NULL) AND
             (source.w_id IS NULL OR dest.w_id IS NULL OR source.w_id <> dest.w_id) AND
-            m.product_qty != 0 AND
+            (m.product_qty != 0 OR m.quantity != 0) AND
             m.state NOT IN ('draft', 'cancel') AND
             (m.state IN ('draft', 'waiting', 'confirmed', 'partially_available', 'assigned') or m.date >= ((now() at time zone 'utc')::date - interval '%(report_period)s month'))
     ),
-    all_sm (id, product_id, tmpl_id, product_qty, date, state, company_id, whs_id, whd_id) AS (
+    all_sm (id, product_id, tmpl_id, product_qty, quantity, date, state, company_id, whs_id, whd_id) AS NOT MATERIALIZED (
         SELECT sm.id, sm.product_id, sm.tmpl_id,
             CASE 
                 WHEN is_duplicated = 0 THEN sm.product_qty
                 WHEN sm.whs_id IS NOT NULL AND sm.whd_id IS NOT NULL AND sm.whs_id != sm.whd_id THEN sm.product_qty
                 ELSE 0
-            END, 
+            END,
+            CASE
+                WHEN is_duplicated = 0 THEN sm.quantity
+                WHEN sm.whs_id IS NOT NULL AND sm.whd_id IS NOT NULL AND sm.whs_id != sm.whd_id THEN sm.quantity
+                ELSE 0
+            END,
             sm.date, sm.state, sm.company_id,
             CASE WHEN is_duplicated = 0 THEN sm.whs_id END,
             CASE 
@@ -154,8 +161,8 @@ FROM (SELECT
             ELSE m.date::date - interval '1 day'
         END, '1 day'::interval)::date date,
         CASE
-            WHEN m.whs_id IS NOT NULL AND m.whd_id IS NULL AND m.state = 'done' THEN m.product_qty
-            WHEN m.whd_id IS NOT NULL AND m.whs_id IS NULL AND m.state = 'done' THEN -m.product_qty
+            WHEN m.whs_id IS NOT NULL AND m.whd_id IS NULL AND m.state = 'done' THEN m.quantity
+            WHEN m.whd_id IS NOT NULL AND m.whs_id IS NULL AND m.state = 'done' THEN -m.quantity
             WHEN m.whs_id IS NOT NULL AND m.whd_id IS NULL THEN -m.product_qty
             WHEN m.whd_id IS NOT NULL AND m.whs_id IS NULL THEN m.product_qty
         END AS product_qty,
@@ -167,7 +174,7 @@ FROM (SELECT
     FROM
         all_sm m
     WHERE
-        m.product_qty != 0) AS forecast_qty
+        m.product_qty != 0 OR (m.state = 'done' AND m.quantity != 0)) AS forecast_qty
 GROUP BY product_id, product_tmpl_id, state, date, company_id, warehouse_id
 );
 """

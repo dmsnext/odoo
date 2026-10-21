@@ -1,7 +1,7 @@
 # Translation of Odoo Server.
 # This file contains the translation of the following modules:
-# 	* utm
-# 
+# * utm
+#
 # Translators:
 # Kim Asplund <kim.asplund@gmail.com>, 2024
 # Robin Calvin, 2024
@@ -13,20 +13,22 @@
 # Kristoffer Grundström <lovaren@gmail.com>, 2024
 # Lasse L, 2024
 # Jakob Krabbe <jakob.krabbe@vertel.se>, 2024
-# 
+# Hanna Kharraziha <hakha@odoo.com>, 2026.
 msgid ""
 msgstr ""
 "Project-Id-Version: Odoo Server 18.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-09-26 08:56+0000\n"
-"PO-Revision-Date: 2024-09-25 09:42+0000\n"
-"Last-Translator: Jakob Krabbe <jakob.krabbe@vertel.se>, 2024\n"
-"Language-Team: Swedish (https://app.transifex.com/odoo/teams/41243/sv/)\n"
+"POT-Creation-Date: 2025-12-29 18:38+0000\n"
+"PO-Revision-Date: 2026-08-31 14:03+0000\n"
+"Last-Translator: Hanna Kharraziha <hakha@odoo.com>\n"
+"Language-Team: Swedish <https://translate.odoo.com/projects/odoo-18/utm/sv/>"
+"\n"
+"Language: sv\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: \n"
-"Language: sv\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Weblate 2026.8.1\n"
 
 #. module: utm
 #. odoo-python
@@ -67,7 +69,7 @@ msgstr "Arkiv"
 #: model_terms:ir.ui.view,arch_db:utm.utm_medium_view_search
 #: model_terms:ir.ui.view,arch_db:utm.view_utm_campaign_view_search
 msgid "Archived"
-msgstr "Arkiverad"
+msgstr "Arkiverade"
 
 #. module: utm
 #: model_terms:ir.actions.act_window,help:utm.action_view_utm_tag
@@ -416,8 +418,8 @@ msgid ""
 "Prepare your Campaign, test it with part of your audience and deploy it "
 "fully afterwards."
 msgstr ""
-"Förbered din kampanj, testa den med en del av din publik och distribuera den"
-" helt och hållet efteråt."
+"Förbered din kampanj, testa den med en del av din publik och distribuera den "
+"helt och hållet efteråt."
 
 #. module: utm
 #. odoo-javascript
@@ -528,8 +530,8 @@ msgstr "Stadier"
 #. module: utm
 #: model_terms:ir.actions.act_window,help:utm.action_view_utm_stage
 msgid ""
-"Stages allow you to organize your workflow  (e.g. plan, design, in progress,"
-" done, …)."
+"Stages allow you to organize your workflow  (e.g. plan, design, in progress, "
+"done, …)."
 msgstr ""
 "Stadier låter dig organisera ditt arbetsflöde (t.ex. planera, designa, "
 "pågående, färdigt, …)."
@@ -576,8 +578,8 @@ msgstr "Den här veckan"
 #. module: utm
 #: model:ir.model.fields,help:utm.field_utm_mixin__campaign_id
 msgid ""
-"This is a name that helps you keep track of your different campaign efforts,"
-" e.g. Fall_Drive, Christmas_Special"
+"This is a name that helps you keep track of your different campaign efforts, "
+"e.g. Fall_Drive, Christmas_Special"
 msgstr ""
 "Det här är ett namn som hjälper dig att hålla koll på dina olika "
 "kampanjinsatser, t.ex. Fall_Drive, Christmas_Special"
@@ -607,8 +609,8 @@ msgstr "Ska godkännas"
 #. odoo-javascript
 #: code:addons/utm/static/src/js/utm_campaign_kanban_examples.js:0
 msgid ""
-"Track incoming events (e.g. Christmas, Black Friday, ...) and publish timely"
-" content."
+"Track incoming events (e.g. Christmas, Black Friday, ...) and publish timely "
+"content."
 msgstr ""
 "Spåra inkommande händelser (t.ex. jul, Black Friday, ...) och publicera "
 "aktuellt innehåll."
@@ -657,8 +659,8 @@ msgstr "UTM-källa Mixin"
 #. module: utm
 #: model_terms:ir.actions.act_window,help:utm.utm_source_action
 msgid ""
-"UTM Sources track where traffic comes from  (e.g. \"May Newsletter\", \"\", "
-"...)."
+"UTM Sources track where traffic comes from  (e.g. \"May Newsletter\", "
+"\"\", ...)."
 msgstr ""
 "UTM-källor spårar var trafiken kommer ifrån (t.ex. \"maj nyhetsbrev\", "
 "\"sommarkampanj\", ...)."

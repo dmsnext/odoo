@@ -4,7 +4,7 @@ from odoo import fields, models, api, _
 from odoo.exceptions import ValidationError
 from odoo.osv import expression
 import pytz
-from datetime import datetime
+from datetime import datetime, time
 
 class CalendarLeaves(models.Model):
     _inherit = "resource.calendar.leaves"
@@ -60,11 +60,11 @@ class CalendarLeaves(models.Model):
 
         previous_durations = leaves.mapped('number_of_days')
         previous_states = leaves.mapped('state')
+        self.env.add_to_compute(self.env['hr.leave']._fields['number_of_days'], leaves)
+        self.env.add_to_compute(self.env['hr.leave']._fields['duration_display'], leaves)
         leaves.sudo().write({
             'state': 'confirm',
         })
-        self.env.add_to_compute(self.env['hr.leave']._fields['number_of_days'], leaves)
-        self.env.add_to_compute(self.env['hr.leave']._fields['duration_display'], leaves)
         sick_time_status = self.env.ref('hr_holidays.holiday_status_sl', raise_if_not_found=False)
         leaves_to_recreate = self.env['hr.leave']
         for previous_duration, leave, state in zip(previous_durations, leaves, previous_states):
@@ -173,3 +173,13 @@ class ResourceCalendar(models.Model):
         global_leave_count = result.get('global', 0)
         for calendar in self:
             calendar.associated_leaves_count = result.get(calendar.id, 0) + global_leave_count
+
+    def _get_flexible_leaves_date(self, res_leaves, resource, tz):
+        super()._get_flexible_leaves_date(res_leaves, resource, tz)
+        return [
+            (tz.localize(datetime.combine(i[0].date(), time.min)).astimezone(pytz.utc),
+             tz.localize(datetime.combine(i[1].date(), time.max)).astimezone(pytz.utc))
+            if not any(holiday.request_unit_half or holiday.request_unit_hours for holiday in i[2].sudo().holiday_id)
+            else (i[0], i[1])
+            for i in res_leaves
+        ]

@@ -271,12 +271,10 @@ class TestMrpReplenish(TestMrpCommon):
         self.assertEqual(form.qty_to_order, 8)
         self.assertEqual(orderpoint.qty_to_order, 8)
 
-    def test_manuf_lead_time_without_bom(self):
+    def test_lead_time_with_no_bom(self):
+        """Test that lead time is incremented by 365 days (1 year) when there
+        is no BoM defined.
         """
-        Test that the manufacturing lead time is correctly applied to a product
-        without a Bill of Materials (BoM).
-        """
-        self.env.company.write({'manufacturing_lead': 3.0})
         route_manufacture = self.warehouse_1.manufacture_pull_id.route_id
         product = self.env['product.product'].create({
             'name': 'test',
@@ -290,4 +288,16 @@ class TestMrpReplenish(TestMrpCommon):
             'product_min_qty': 0,
             'product_max_qty': 5,
         })
-        self.assertEqual(orderpoint.lead_days_date, fields.Date.today() + timedelta(days=3))
+        self.assertEqual(orderpoint.lead_days_date, fields.Date.today() + timedelta(days=365))
+
+    def test_orderpoint_with_kit_bom_in_another_company(self):
+        """Test that an orderpoint can be created for a product
+        having a kit-type BoM defined in another company.
+        """
+        self.assertEqual(self.bom_2.type, 'phantom')
+        self.assertEqual(self.bom_2.company_id, self.env.company)
+        company_2 = self.env['res.company'].create({'name': 'Company 2'})
+        orderpoint = self.env['stock.warehouse.orderpoint'].with_company(company_2).create({
+            'product_id': self.bom_2.product_id.id,
+        })
+        self.assertEqual(orderpoint.company_id, company_2)

@@ -26,6 +26,7 @@ import odoo
 from .config import config
 from .misc import file_open, file_path, SKIPPED_ELEMENT_TYPES
 from odoo.exceptions import ValidationError
+from odoo.tools.safe_eval import _UNSAFE_ATTRIBUTES
 
 from .safe_eval import safe_eval as s_eval, pytz, time
 
@@ -169,7 +170,9 @@ def _eval_xml(self, node, env):
     elif node.tag == "function":
         model_str = node.get('model')
         model = env[model_str]
-        method_name = node.get('name')
+        method_name = node.get('name') or ''
+        if '__' in method_name or method_name in _UNSAFE_ATTRIBUTES:
+            raise NameError(f'Access to forbidden name {method_name!r}')
         # determine arguments
         args = []
         kwargs = {}
@@ -494,10 +497,16 @@ form: module.record_id""" % (xml_id,)
             record.append(Field(name='website_id', ref=el.get('website_id')))
         if 'key' in el.attrib:
             record.append(Field(el.get('key'), name='key'))
+
+        # If the "active" value is set on the root node (instead of an inner
+        # <field>), it is treated as the value for the "active" field but only
+        # when *not updating*. This allows to update the record in a more recent
+        # version without changing its active state (compatibility).
         if el.get('active') in ("True", "False"):
             view_id = self.id_get(tpl_id, raise_if_not_found=False)
             if self.mode != "update" or not view_id:
                 record.append(Field(name='active', eval=el.get('active')))
+
         if el.get('customize_show') in ("True", "False"):
             record.append(Field(name='customize_show', eval=el.get('customize_show')))
         groups = el.attrib.pop('groups', None)
@@ -517,6 +526,46 @@ form: module.record_id""" % (xml_id,)
         # inject complete <template> element (after changing node name) into
         # the ``arch`` field
         record.append(Field(el, name="arch", type="xml"))
+
+        return self._tag_record(record)
+
+    def _tag_asset(self, el):
+        """
+        Transforms an <asset> element into a <record> and forwards it.
+        """
+        asset_id = el.get('id')
+        Field = builder.E.field
+
+        record = etree.Element('record', attrib={
+            'id': asset_id,
+            'model': 'theme.ir.asset' if self.module.startswith('theme_') else 'ir.asset',
+        })
+
+        name = el.get('name', asset_id)
+        record.append(Field(name, name='name'))
+
+        # E.g. <bundle directive="prepend">web.assets_frontend</bundle>
+        # (directive is optional)
+        bundle_el = el.find('bundle')
+        record.append(Field(bundle_el.text, name='bundle'))
+        if 'directive' in bundle_el.attrib:
+            record.append(Field(bundle_el.get('directive'), name='directive'))
+
+        # E.g. <path>website/static/src/snippets/s_share/000.scss</path>
+        record.append(Field(el.find('path').text, name='path'))
+
+        # Same as <template> for ir.ui.view:
+        # If the "active" value is set on the root node (instead of an inner
+        # <field>), it is treated as the value for the "active" field but only
+        # when *not updating*. This allows to update the record in a more recent
+        # version without changing its active state (compatibility).
+        if el.get('active') in ("True", "False"):
+            record_id = self.id_get(asset_id, raise_if_not_found=False)
+            if self.mode != "update" or not record_id:
+                record.append(Field(name='active', eval=el.get('active')))
+
+        for child in el.iterchildren('field'):
+            record.append(child)
 
         return self._tag_record(record)
 
@@ -592,6 +641,7 @@ form: module.record_id""" % (xml_id,)
             'function': self._tag_function,
             'menuitem': self._tag_menuitem,
             'template': self._tag_template,
+            'asset': self._tag_asset,
 
             **dict.fromkeys(self.DATA_ROOTS, self._tag_root)
         }

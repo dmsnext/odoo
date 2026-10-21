@@ -1,10 +1,16 @@
 /** @odoo-module */
 
-import { on, setFrameRate } from "@odoo/hoot-dom";
+import { on } from "@odoo/hoot-dom";
 import { markRaw, reactive, toRaw } from "@odoo/owl";
-import { cleanupDOM, defineRootNode } from "@web/../lib/hoot-dom/helpers/dom";
-import { cleanupEvents, enableEventLogs } from "@web/../lib/hoot-dom/helpers/events";
-import { cleanupTime, setupTime } from "@web/../lib/hoot-dom/helpers/time";
+import { _cleanupDOM, _defineRootNode } from "@web/../lib/hoot-dom/helpers/dom";
+import { _cleanupEvents, _enableEventLogs } from "@web/../lib/hoot-dom/helpers/events";
+import {
+    _cleanupTime,
+    _discardTimers,
+    _setDefaultWaitTimeout,
+    _setFrameRate,
+    _setupTime,
+} from "@web/../lib/hoot-dom/helpers/time";
 import { exposeHelpers, isInstanceOf, isIterable } from "@web/../lib/hoot-dom/hoot_dom_utils";
 import {
     CASE_EVENT_TYPES,
@@ -31,7 +37,7 @@ import {
 import { cleanupAnimations } from "../mock/animation";
 import { cleanupDate } from "../mock/date";
 import { internalRandom } from "../mock/math";
-import { cleanupNavigator, mockUserAgent } from "../mock/navigator";
+import { cleanupNavigator } from "../mock/navigator";
 import { cleanupNetwork, throttleNetwork } from "../mock/network";
 import {
     cleanupWindow,
@@ -50,8 +56,16 @@ import { Test, testError } from "./test";
 import { EXCLUDE_PREFIX, createUrlFromId, setParams } from "./url";
 
 // Import all helpers for debug mode
-import * as hootDom from "@odoo/hoot-dom";
-import * as hootMock from "@odoo/hoot-mock";
+import * as _hootDom from "@odoo/hoot-dom";
+import * as _animation from "../mock/animation";
+import * as _date from "../mock/date";
+import * as _math from "../mock/math";
+import * as _navigator from "../mock/navigator";
+import * as _network from "../mock/network";
+import * as _notification from "../mock/notification";
+import * as _window from "../mock/window";
+
+const { isPrevented, mockPreventDefault } = _window;
 
 /**
  * @typedef {{
@@ -115,7 +129,7 @@ const {
     Number: { parseFloat: $parseFloat },
     Object: {
         assign: $assign,
-        defineProperties: $defineProperties,
+        defineProperty: $defineProperty,
         entries: $entries,
         freeze: $freeze,
         fromEntries: $fromEntries,
@@ -163,8 +177,11 @@ function formatIncludes(values) {
  */
 function formatAssertions(assertions) {
     const lines = [];
-    for (const { failedDetails, label, message, number } of assertions) {
+    for (const { additionalMessage, failedDetails, label, message, number } of assertions) {
         const formattedMessage = message.map((part) => (isLabel(part) ? part[0] : String(part)));
+        if (additionalMessage) {
+            formattedMessage.push(`(${additionalMessage})`);
+        }
         lines.push(`\n${number}. [${label}] ${formattedMessage.join(" ")}`);
         if (failedDetails) {
             for (const detail of failedDetails) {
@@ -192,15 +209,6 @@ function formatAssertions(assertions) {
 }
 
 /**
- * @param {Event} ev
- */
-function safePrevent(ev) {
-    if (ev.cancelable) {
-        ev.preventDefault();
-    }
-}
-
-/**
  * @template T
  * @param {T[]} array
  */
@@ -220,7 +228,7 @@ function shuffle(array) {
  */
 function handleConsoleIssues(test, shouldSuppress) {
     if (shouldSuppress && test.config.todo) {
-        return logger.suppressIssues(`suppressed by "test.todo"`);
+        return logger.setIssueLevel("suppressed");
     } else {
         const cleanups = [];
         if (isInstanceOf(globalThis.console, EventTarget)) {
@@ -246,7 +254,7 @@ function warnUserEvent(ev) {
         return;
     }
 
-    logger.warn(
+    logger.global.warn(
         `User event detected: "${ev.type}"\n\n`,
         `This kind of interaction can interfere with the current test and should be avoided.`
     );
@@ -260,6 +268,12 @@ const WARNINGS = {
         "The following tag names are very similar to each other and may be confusing for other developers:",
 };
 const RESIZE_OBSERVER_MESSAGE = "ResizeObserver loop completed with undelivered notifications";
+/**
+ * Share of a test's timeout given by default to DOM waits ('waitUntil' and
+ * derived helpers), so that a failing wait is reported before the test itself
+ * times out.
+ */
+const WAIT_TIMEOUT_RATIO = 2 / 3;
 const handledErrors = new WeakSet();
 /** @type {string | null} */
 let lastPresetWarn = null;
@@ -464,8 +478,10 @@ export class Runner {
             internalRandom.seed = this.config.random;
         }
 
-        on(window, "error", this._handleError.bind(this));
-        on(window, "unhandledrejection", this._handleError.bind(this));
+        this._handleError = this._handleError.bind(this);
+
+        on(window, "error", this._handleError);
+        on(window, "unhandledrejection", this._handleError);
     }
 
     /**
@@ -475,7 +491,9 @@ export class Runner {
      */
     addSuite(config, name, fn) {
         if (!name) {
-            throw new HootError(`a suite name must not be empty, got ${name}`);
+            throw new HootError(`a suite name must not be empty, got ${name}`, {
+                level: "critical",
+            });
         }
         const names = ensureArray(name).flatMap((n) => normalize(n).split("/").filter(Boolean));
         const [suiteName, ...otherNames] = names;
@@ -529,18 +547,15 @@ export class Runner {
                 if (err instanceof HootError) {
                     throw err;
                 } else {
-                    error = String(err);
+                    error = err;
                 }
             }
         }
         this.suiteStack.pop();
         if (error) {
-            throw suiteError({ name: suiteName, parent: parentSuite }, error);
+            throw suiteError(suite, error);
         } else if (result !== undefined) {
-            throw suiteError(
-                { name: suiteName, parent: parentSuite },
-                `the suite function cannot return a value`
-            );
+            throw suiteError(suite, `the suite function cannot return a value`);
         }
 
         return suite;
@@ -553,7 +568,9 @@ export class Runner {
      */
     addTest(config, name, fn) {
         if (!name) {
-            throw new HootError(`a test name must not be empty, got ${name}`);
+            throw new HootError(`a test name must not be empty, got ${name}`, {
+                level: "critical",
+            });
         }
         const parentSuite = this.suiteStack.at(-1);
         if (!parentSuite) {
@@ -577,7 +594,7 @@ export class Runner {
         if (originalTest && !originalTest.isMinimized) {
             if (this.dry || originalTest.run) {
                 throw testError(
-                    { name, parent: parentSuite },
+                    test,
                     `a test with that name already exists in the suite ${stringify(
                         parentSuite.name
                     )}`
@@ -745,7 +762,7 @@ export class Runner {
         } else {
             if (lastPresetWarn !== presetId) {
                 this._handleGlobalWarning(WARNINGS.viewport);
-                logger.warn(
+                logger.global.warn(
                     WARNINGS.viewport,
                     `\n> expected:`,
                     width,
@@ -777,10 +794,14 @@ export class Runner {
      */
     async dryRun(callback) {
         if (this.state.status !== "ready") {
-            throw new HootError("cannot run a dry run after the test runner started");
+            throw new HootError("cannot run a dry run after the test runner started", {
+                level: "global",
+            });
         }
         if (this._prepared) {
-            throw new HootError("cannot run a dry run: runner has already been prepared");
+            throw new HootError("cannot run a dry run: runner has already been prepared", {
+                level: "global",
+            });
         }
 
         this.dry = true;
@@ -827,6 +848,7 @@ export class Runner {
     }
 
     manualStart() {
+        this._canStartDef ||= Promise.withResolvers();
         this._canStartDef.resolve(true);
     }
 
@@ -891,7 +913,9 @@ export class Runner {
             this._prepareRunner();
             await this._setupStart();
         } else if (!jobs.length) {
-            throw new HootError("cannot start test runner: runner has already started");
+            throw new HootError("cannot start test runner: runner has already started", {
+                level: "global",
+            });
         }
 
         if (this.state.status === "done") {
@@ -908,9 +932,6 @@ export class Runner {
 
         this.state.status = "running";
 
-        /** @type {Runner["_handleError"]} */
-        const handleError = this._handleError.bind(this);
-
         let job = this._nextJob(jobs);
         while (job && this.state.status === "running") {
             const callbackChain = this._getCallbackChain(job);
@@ -926,16 +947,16 @@ export class Runner {
                         this.suiteStack.push(suite);
 
                         suite.before();
-                        await this._callbacks.call("before-suite", suite, handleError);
-                        await suite.callbacks.call("before-suite", suite, handleError);
+                        await this._callbacks.call("before-suite", suite, this._handleError);
+                        await suite.callbacks.call("before-suite", suite, this._handleError);
                     }
                     if (suite.currentJobIndex >= suite.currentJobs.length) {
                         // after suite code
                         this.suiteStack.pop();
 
                         await this._execAfterCallback(async () => {
-                            await suite.callbacks.call("after-suite", suite, handleError);
-                            await this._callbacks.call("after-suite", suite, handleError);
+                            await suite.callbacks.call("after-suite", suite, this._handleError);
+                            await this._callbacks.call("after-suite", suite, this._handleError);
                         });
                         suite.after();
 
@@ -974,16 +995,21 @@ export class Runner {
                 continue;
             }
 
+            logger.logTest(test);
+
             // Suppress console errors and warnings if test is in "todo" mode
             // (and not in debug).
             const restoreConsole = handleConsoleIssues(test, !this.debug);
+
+            const timeout = $floor(test.config.timeout || this.config.timeout);
+            _setDefaultWaitTimeout(timeout && !this.debug ? timeout * WAIT_TIMEOUT_RATIO : 0);
 
             // Before test
             this.state.currentTest = test;
             this.expectHooks.before(test);
             test.before();
             for (const callbackRegistry of [...callbackChain].reverse()) {
-                await callbackRegistry.call("before-test", test, handleError);
+                await callbackRegistry.call("before-test", test, this._handleError);
             }
 
             let timeoutId = 0;
@@ -992,24 +1018,18 @@ export class Runner {
             // ! keep the smallest stack trace possible:
             // !    Runner.start() > Test.run() > Error
             const testPromise = Promise.resolve(test.run());
-            const timeout = $floor(test.config.timeout || this.config.timeout);
             const timeoutPromise = new Promise((resolve, reject) => {
                 // Set abort signal
                 this._resolveCurrent = resolve;
 
                 if (timeout && !this.debug) {
                     // Set timeout
-                    timeoutId = setTimeout(
-                        () =>
-                            reject(
-                                new HootError(
-                                    `test ${stringify(
-                                        test.name
-                                    )} timed out after ${timeout} milliseconds`
-                                )
-                            ),
-                        timeout
-                    );
+                    timeoutId = setTimeout(() => {
+                        const msg = `test ${stringify(
+                            test.name
+                        )} timed out after ${timeout} milliseconds`;
+                        reject(new HootError(msg));
+                    }, timeout);
                 }
             }).then(() => {
                 this.aborted = true;
@@ -1018,14 +1038,11 @@ export class Runner {
 
             // Run test
             await Promise.race([testPromise, timeoutPromise])
-                .catch((error) => {
-                    if (handleError) {
-                        return handleError(error);
-                    } else {
-                        throw error;
-                    }
-                })
+                .catch(this._handleError)
                 .finally(() => {
+                    // Prevent pending waits from resuming the test once it has
+                    // ended, e.g. after timing out
+                    _discardTimers();
                     this._resolveCurrent = null;
 
                     if (timeoutId) {
@@ -1037,7 +1054,7 @@ export class Runner {
             const { lastResults } = test;
             await this._execAfterCallback(async () => {
                 for (const callbackRegistry of callbackChain) {
-                    await callbackRegistry.call("after-test", test, handleError);
+                    await callbackRegistry.call("after-test", test, this._handleError);
                 }
             });
             test.after();
@@ -1046,14 +1063,7 @@ export class Runner {
 
             // Log test errors and increment counters
             this.expectHooks.after(this);
-            if (lastResults.pass) {
-                logger.logTest(test);
-
-                if (this.state.failedIds.has(test.id)) {
-                    this.state.failedIds.delete(test.id);
-                    storageSet(STORAGE.failed, [...this.state.failedIds]);
-                }
-            } else {
+            if (!lastResults.pass) {
                 this._failed++;
 
                 const failReasons = [];
@@ -1074,7 +1084,7 @@ export class Runner {
                         ...lastResults.currentErrors.map((error) => `\n${error.message}`)
                     );
                 }
-                logger.logGlobalError(
+                logger.global.error(
                     [`Test ${stringify(test.fullName)} failed:`, ...failReasons].join("\n")
                 );
 
@@ -1086,9 +1096,12 @@ export class Runner {
                     this.state.failedIds.add(test.id);
                     storageSet(STORAGE.failed, [...this.state.failedIds]);
                 }
+            } else if (this.state.failedIds.has(test.id)) {
+                this.state.failedIds.delete(test.id);
+                storageSet(STORAGE.failed, [...this.state.failedIds]);
             }
 
-            await this._callbacks.call("after-post-test", test, handleError);
+            await this._callbacks.call("after-post-test", test, this._handleError);
 
             this._pushTest(test);
             this.totalTime = formatTime($now() - this._startTime);
@@ -1149,6 +1162,17 @@ export class Runner {
 
         await this._callbacks.call("after-all", this, logger.error);
 
+        if (this.headless) {
+            // Log root suite results in headless
+            const restoreLogLevel = logger.setLogLevel("suites");
+            for (const suite of this.suites.values()) {
+                if (!suite.parent) {
+                    logger.logSuite(suite);
+                }
+            }
+            restoreLogLevel();
+        }
+
         const { passed, failed, assertions } = this.reporting;
         if (failed > 0) {
             const errorMessage = ["Some tests failed: see above for details"];
@@ -1178,6 +1202,8 @@ export class Runner {
             // all suites have passed.
             logger.logRun("Test suite succeeded");
         }
+
+        logger.setIssueLevel("critical"); // Goes back to critical mode after a test run
 
         return false;
     }
@@ -1313,17 +1339,16 @@ export class Runner {
         /** @type {Configurators} */
         const configurators = { ...configuratorGetters, ...configuratorMethods };
 
-        const properties = {};
         for (const [key, getter] of $entries(configuratorGetters)) {
-            properties[key] = { get: getter };
+            $defineProperty(configurableFn, key, { get: getter });
         }
         for (const [key, getter] of $entries(configuratorMethods)) {
-            properties[key] = { value: getter };
+            $defineProperty(configurableFn, key, { value: getter });
         }
 
         /** @type {{ tags: Tag[], [key: string]: any }} */
         let currentConfig = { tags: [] };
-        return $defineProperties(configurableFn, properties);
+        return configurableFn;
     }
 
     /**
@@ -1338,14 +1363,15 @@ export class Runner {
                 case Tag.DEBUG:
                     if (typeof this.debug !== "boolean" && this.debug !== job) {
                         throw new HootError(
-                            `cannot set multiple tests or suites as "debug" at the same time`
+                            `cannot set multiple tests or suites as "debug" at the same time`,
+                            { level: "critical" }
                         );
                     }
                     this.debug = job;
                 // Falls through
                 case Tag.ONLY:
                     if (!this.dry) {
-                        logger.logGlobalWarning(
+                        logger.global.warn(
                             `${stringify(job.fullName)} is marked as ${stringify(
                                 tag.name
                             )}. This is not suitable for CI`
@@ -1365,7 +1391,7 @@ export class Runner {
 
         if (shouldSkip) {
             if (ignoreSkip) {
-                logger.logGlobalWarning(
+                logger.global.warn(
                     `${stringify(
                         job.fullName
                     )} is marked as skipped but explicitly included: "skip" modifier has been ignored`
@@ -1390,7 +1416,7 @@ export class Runner {
         }
 
         /**
-         * @param  {...string} tagNames
+         * @param {...string} tagNames
          */
         const addTagsToCurrent = (...tagNames) => {
             const current = getCurrent();
@@ -1420,7 +1446,6 @@ export class Runner {
      * @param {boolean} [canEraseParent]
      */
     _erase(job, canEraseParent = false) {
-        job.minimize();
         if (job instanceof Suite) {
             if (!job.reporting.failed) {
                 this.suites.delete(job.id);
@@ -1430,6 +1455,7 @@ export class Runner {
                 this.tests.delete(job.id);
             }
         }
+        job.minimize();
         if (canEraseParent && job.parent) {
             const jobIndex = job.parent.jobs.indexOf(job);
             if (jobIndex >= 0) {
@@ -1610,8 +1636,8 @@ export class Runner {
             let debugTest = this.debug;
             while (debugTest instanceof Suite) {
                 if (debugTest.jobs.length > 1) {
-                    throw new HootError(
-                        `cannot debug a suite with more than 1 job, got ${debugTest.jobs.length}`
+                    logger.global.warn(
+                        `debugging a suite with ${debugTest.jobs.length} jobs: only the first one will be run`
                     );
                 }
                 debugTest = debugTest.jobs[0];
@@ -1682,13 +1708,12 @@ export class Runner {
         if (this.config.preset) {
             const preset = this.presets[this.config.preset];
             if (!preset) {
-                throw new HootError(`unknown preset: "${this.config.preset}"`);
+                throw new HootError(`unknown preset: "${this.config.preset}"`, {
+                    level: "critical",
+                });
             }
             if (preset.tags?.length) {
                 this._include(this.state.includeSpecs.tag, preset.tags, INCLUDE_LEVEL.preset);
-            }
-            if (preset.platform) {
-                mockUserAgent(preset.platform);
             }
             if (typeof preset.touch === "boolean") {
                 this.beforeEach(() => mockTouch(preset.touch));
@@ -1716,7 +1741,7 @@ export class Runner {
             this._handleGlobalWarning(
                 WARNINGS.tagNames + similarities.map((s) => `\n- ${s.map(stringify).join(" / ")}`)
             );
-            logger.logGlobalWarning(WARNINGS.tagNames, similarities);
+            logger.global.warn(WARNINGS.tagNames, similarities);
         }
 
         this._populateState = true;
@@ -1724,7 +1749,7 @@ export class Runner {
         this._populateState = false;
 
         if (!this.state.tests.length) {
-            throw new HootError(`no tests to run`);
+            logger.logGlobal(`no tests to run`);
         }
 
         // Reduce non-included suites & tests info to a miminum
@@ -1769,15 +1794,16 @@ export class Runner {
             return;
         }
         const error = ensureError(ev);
-        if (handledErrors.has(error)) {
-            // Already handled
-            return safePrevent(ev);
-        }
-        handledErrors.add(error);
-
         if (!isInstanceOf(ev, Event)) {
             ev = new ErrorEvent("error", { error });
         }
+        if (handledErrors.has(error)) {
+            // Already handled
+            return ev.preventDefault();
+        }
+        handledErrors.add(error);
+
+        mockPreventDefault(ev);
 
         if (error.message.includes(RESIZE_OBSERVER_MESSAGE)) {
             // Stop event
@@ -1785,26 +1811,31 @@ export class Runner {
             if (ev.bubbles) {
                 ev.stopPropagation();
             }
-            return safePrevent(ev);
+            return ev.preventDefault();
         }
 
-        if (this.state.currentTest && !(error instanceof HootError)) {
+        if (this.state.currentTest) {
             // Handle the error in the current test
             const handled = this._handleErrorInTest(ev, error);
             if (handled) {
-                return safePrevent(ev);
+                if (!(error instanceof HootError)) {
+                    ev.preventDefault();
+                }
+                return;
             }
         } else {
             this._handleGlobalError(ev, error);
         }
 
         // Prevent error event
-        safePrevent(ev);
+        ev.preventDefault();
 
         // Log error
-        if (this.dry || error.global) {
-            // Stringify the error to avoid logging whole traceback on CI
-            logger.logGlobalError(String(error));
+        if (error.level) {
+            const restoreLogger = logger.setIssueLevel(error.level);
+            // Stringify global errors to avoid logging whole tracebacks on CI
+            logger.error(error.level === "global" ? String(error) : error);
+            restoreLogger();
         } else {
             logger.error(error);
         }
@@ -1817,7 +1848,7 @@ export class Runner {
     _handleErrorInTest(ev, error) {
         for (const callbackRegistry of this._getCallbackChain(this.state.currentTest)) {
             callbackRegistry.callSync("error", ev, logger.error);
-            if (ev.defaultPrevented) {
+            if (isPrevented(ev)) {
                 // Prevented in tests
                 return true;
             }
@@ -1866,7 +1897,7 @@ export class Runner {
     async _setupStart() {
         this._startTime = $now();
         if (this.config.manual) {
-            this._canStartDef = Promise.withResolvers();
+            this._canStartDef ||= Promise.withResolvers();
         }
 
         // Config log
@@ -1880,6 +1911,7 @@ export class Runner {
             logger.table(table);
         });
         logger.logRun("Starting test suites");
+        logger.setIssueLevel("trace");
 
         // Adjust debug mode if more or less than 1 test will be run
         if (this.debug) {
@@ -1887,17 +1919,28 @@ export class Runner {
                 (test) => !test.config.skip && !test.config.multi
             );
             if (activeSingleTests.length !== 1) {
-                logger.logGlobalWarning(
+                logger.global.warn(
                     `Disabling debug mode: ${activeSingleTests.length} tests will be run`
                 );
                 this.config.debugTest = false;
                 this.debug = false;
             } else {
-                const nameSpace = exposeHelpers(hootDom, hootMock, {
-                    destroy,
-                    getFixture: this.fixture.get,
-                });
-                logger.setLevel("debug");
+                const nameSpace = exposeHelpers(
+                    _hootDom,
+                    _animation,
+                    _date,
+                    _math,
+                    _navigator,
+                    _network,
+                    _notification,
+                    _window,
+                    {
+                        __debug__: this,
+                        destroy,
+                        getFixture: this.fixture.get,
+                    }
+                );
+                logger.setLogLevel("debug");
                 logger.logDebug(
                     `Debug mode is active: Hoot helpers available from \`window.${nameSpace}\``
                 );
@@ -1905,28 +1948,28 @@ export class Runner {
         }
 
         // Register default hooks
-        this.beforeAll(defineRootNode.bind(null, this.fixture.get));
+        this.beforeAll(_defineRootNode.bind(null, this.fixture.get));
         this.afterAll(
             // Warn user events
             !this.debug && on(window, "pointermove", warnUserEvent),
             !this.debug && on(window, "pointerdown", warnUserEvent),
             !this.debug && on(window, "keydown", warnUserEvent)
         );
-        this.beforeEach(this.fixture.setup, setupWindow, setupTime);
+        this.beforeEach(this.fixture.setup, setupWindow, _setupTime);
         this.afterEach(
             this.fixture.cleanup,
             cleanupAnimations,
             cleanupWindow,
             cleanupNetwork,
             cleanupNavigator,
-            cleanupEvents,
-            cleanupDOM,
+            _cleanupEvents,
+            _cleanupDOM,
             cleanupDate,
-            cleanupTime
+            _cleanupTime
         );
 
-        enableEventLogs(logger.allows("debug"));
-        setFrameRate(this.config.fps);
+        _enableEventLogs(logger.canLog("debug"));
+        _setFrameRate(this.config.fps);
 
         await this._callbacks.call("before-all", this, logger.error);
     }

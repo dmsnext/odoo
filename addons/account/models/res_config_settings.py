@@ -190,14 +190,14 @@ class ResConfigSettings(models.TransientModel):
         string='Vendor Bills Discounts Account',
         readonly=False,
         related='company_id.account_discount_income_allocation_id',
-        domain="[('account_type', 'in', ('income', 'expense'))]",
+        domain="[('deprecated', '=', False), ('account_type', 'in', ('income', 'income_other', 'expense'))]",
     )
     account_discount_expense_allocation_id = fields.Many2one(
         comodel_name='account.account',
         string='Customer Invoices Discounts Account',
         readonly=False,
         related='company_id.account_discount_expense_allocation_id',
-        domain="[('account_type', 'in', ('income', 'expense'))]",
+        domain="[('deprecated', '=', False), ('account_type', 'in', ('income', 'income_other', 'expense'))]",
     )
 
     # PEPPOL
@@ -237,7 +237,7 @@ class ResConfigSettings(models.TransientModel):
 
     def _inverse_account_default_credit_limit(self):
         for setting in self:
-            self.env['ir.default'].set(
+            self.env['ir.default'].sudo().set(
                 'res.partner',
                 'credit_limit',
                 setting.account_default_credit_limit,

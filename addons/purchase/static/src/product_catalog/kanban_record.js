@@ -4,6 +4,7 @@ import { ProductCatalogPurchaseOrderLine } from "./purchase_order_line/purchase_
 import { rpc } from "@web/core/network/rpc";
 import { patch } from "@web/core/utils/patch";
 import { useService } from "@web/core/utils/hooks";
+import { formatFloat } from "@web/views/fields/formatters";
 import { useSubEnv } from "@odoo/owl";
 
 patch(ProductCatalogKanbanRecord.prototype, {
@@ -32,15 +33,18 @@ patch(ProductCatalogKanbanRecord.prototype, {
 
     async updatePackagingQuantity(packaging) {
         const productPackagingQty =
-            Math.floor(this.productCatalogData.quantity / packaging.qty) + 1;
+            Math.floor(parseFloat(formatFloat(this.productCatalogData.quantity / packaging.qty))) + 1;
         this.productCatalogData.quantity = productPackagingQty * packaging.qty;
-        const price = await rpc("/product/catalog/update_order_line_info", {
-            order_id: this.env.orderId,
-            product_id: this.env.productId,
-            product_packaging_id: packaging.id,
-            product_packaging_qty: productPackagingQty,
-            res_model: this.env.orderResModel,
-        });
+        this._pendingUpdate = this._pendingUpdate.then(() =>
+            rpc("/product/catalog/update_order_line_info", {
+                order_id: this.env.orderId,
+                product_id: this.env.productId,
+                product_packaging_id: packaging.id,
+                product_packaging_qty: productPackagingQty,
+                res_model: this.env.orderResModel,
+            })
+        );
+        const price = await this._pendingUpdate;
         this.productCatalogData.price = parseFloat(price);
     },
 });

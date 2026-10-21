@@ -4550,3 +4550,62 @@ test("missing deleted property field definition is created", async function (ass
     expect.verifySteps([`["properties.my_char"]`]);
     expect(getCurrentValues()).toBe("4,2,1");
 });
+
+test("do not count distinct a measure field if we are grouping by it", async () => {
+    onRpc("read_group", ({ kwargs }) => {
+        expect(kwargs.fields.length).toBe(1);
+        if (kwargs.groupby.length === 0) {
+            expect(kwargs.fields).toEqual(["product_id:count_distinct"]);
+        }
+        if (kwargs.groupby.length === 1) {
+            expect(kwargs.fields).toEqual(["product_id"]);
+        }
+    });
+    await mountView({
+        type: "pivot",
+        resModel: "partner",
+        arch: `
+			<pivot>
+				<field name="product_id" type="measure"/>
+			</pivot>`,
+        groupBy: ["product_id"],
+    });
+});
+
+test("Measure from arch is not lost after update", async () => {
+    let readGroupCount = 0;
+    onRpc("read_group", ({ kwargs }) => {
+        readGroupCount++;
+    });
+    await mountView({
+        type: "pivot",
+        resModel: "partner",
+        searchViewArch: `
+                <search>
+                    <filter name="some_filter" string="Some Filter" domain="[('foo', '>', 10)]"/>
+                </search>`,
+        arch: `
+			<pivot>
+				<field name="product_id" type="measure"/>
+			</pivot>`,
+        groupBy: ["product_id"],
+    });
+
+    expect(readGroupCount).toBe(2);
+    expect("td.o_pivot_cell_value:contains(2)").toHaveCount(1);
+
+    await contains(".o_pivot_buttons button.dropdown-toggle").click();
+    expect(".dropdown-menu .dropdown-item:contains(Product)").toHaveCount(1);
+
+    await contains(".dropdown-item:contains(Product)").click();
+    await contains(".dropdown-item:contains(Count)").click();
+    expect("td.o_pivot_cell_value:contains(4)").toHaveCount(1);
+    expect(readGroupCount).toBe(4);
+
+    await toggleSearchBarMenu();
+    await toggleMenuItem("Some Filter");
+    expect(readGroupCount).toBe(6);
+
+    await contains(".o_pivot_buttons button.dropdown-toggle").click();
+    expect(".dropdown-menu .dropdown-item:contains(Product)").toHaveCount(1);
+});

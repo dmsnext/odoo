@@ -2,20 +2,21 @@
 
 import { markRaw } from "@odoo/owl";
 import {
+    _getNodeAttribute,
+    _getNodeRect,
+    _getNodeText,
+    _getNodeValue,
+    _getStyle,
+    _isCheckable,
+    _isEmpty,
+    _isNode,
+    _isNodeDisplayed,
+    _isNodeVisible,
     formatXml,
     getActiveElement,
-    getNodeAttribute,
-    getNodeRect,
-    getNodeText,
-    getNodeValue,
-    getStyle,
-    isCheckable,
-    isEmpty,
-    isNode,
-    isNodeDisplayed,
-    isNodeVisible,
     queryRect,
 } from "@web/../lib/hoot-dom/helpers/dom";
+import { _getDefaultWaitTimeout } from "@web/../lib/hoot-dom/helpers/time";
 import {
     addInteractionListener,
     getColorHex,
@@ -45,6 +46,7 @@ import {
     S_NONE,
     strictEqual,
 } from "../hoot_utils";
+import { mockFetch } from "../mock/network";
 import { logger } from "./logger";
 import { Test } from "./test";
 
@@ -58,7 +60,7 @@ import { Test } from "./test";
  *
  * @typedef {string | ((pass: boolean) => string)} AssertionMessage
  *
- * @typedef {string | string[] | ((pass: boolean, raw: typeof String["raw"]) => string | string[])} AssertionReportMessage
+ * @typedef {string | string[] | ((pass: boolean) => string | string[])} AssertionReportMessage
  *
  * @typedef {VerifierOptions & {
  *  timeout?: number;
@@ -134,6 +136,7 @@ const {
     Array: { isArray: $isArray },
     clearTimeout,
     Error,
+    Intl: { ListFormat },
     Math: { abs: $abs, floor: $floor },
     Object: { assign: $assign, create: $create, entries: $entries, keys: $keys },
     parseFloat,
@@ -177,7 +180,7 @@ function detailsFromValues(...args) {
  * @param {...unknown} args
  */
 function detailsFromValuesWithDiff(...args) {
-    return [...detailsFromValues(...args), Markup.diff(...args)];
+    return detailsFromValues(...args).concat([Markup.diff(...args)]);
 }
 
 /**
@@ -236,7 +239,7 @@ function getStack(depth) {
  * @returns {Record<string, string>}
  */
 function getStyleValues(node, keys) {
-    const nodeStyle = getStyle(node);
+    const nodeStyle = _getStyle(node);
     const styleValues = $create(null);
     if (nodeStyle) {
         for (const key of keys) {
@@ -303,7 +306,7 @@ function listJoin(list, separator, lastSeparator) {
 /** @type {typeof makeLabel} */
 function makeLabelOrString(...args) {
     const label = makeLabel(...args);
-    if (logger.allows("debug")) {
+    if (logger.canLog("debug")) {
         debugLabelCache.set(label, args[0]);
     }
     return label[1] === null ? label[0] : label;
@@ -446,6 +449,7 @@ export function makeExpect(params) {
         if (currentResult.currentSteps.length) {
             currentResult.registerEvent("assertion", {
                 label: "step",
+                docLabel: "expect.step",
                 pass: false,
                 failedDetails: detailsFromEntries([["Steps:", currentResult.currentSteps]]),
                 reportMessage: [r`unverified steps`],
@@ -456,6 +460,7 @@ export function makeExpect(params) {
         if (!(assertionCount + queryCount)) {
             currentResult.registerEvent("assertion", {
                 label: "assertions",
+                docLabel: "expect.assertions",
                 pass: false,
                 reportMessage: [
                     r`expected at least`,
@@ -469,6 +474,7 @@ export function makeExpect(params) {
         ) {
             currentResult.registerEvent("assertion", {
                 label: "assertions",
+                docLabel: "expect.assertions",
                 pass: false,
                 reportMessage: [
                     r`expected`,
@@ -484,6 +490,7 @@ export function makeExpect(params) {
         if (currentResult.currentErrors.length) {
             currentResult.registerEvent("assertion", {
                 label: "errors",
+                docLabel: "expect.errors",
                 pass: false,
                 reportMessage: [currentResult.currentErrors.length, r`unverified error(s)`],
             });
@@ -493,6 +500,7 @@ export function makeExpect(params) {
         if (currentResult.expectedErrors && currentResult.expectedErrors !== errorCount) {
             currentResult.registerEvent("assertion", {
                 label: "errors",
+                docLabel: "expect.errors",
                 pass: false,
                 reportMessage: [
                     r`expected`,
@@ -539,6 +547,7 @@ export function makeExpect(params) {
             /** @type {import("../hoot_utils").Reporting} */
             const report = {
                 assertions: assertionCount,
+                duration: test.lastResults?.duration || 0,
                 tests: 1,
             };
             if (!currentResult.pass) {
@@ -562,6 +571,12 @@ export function makeExpect(params) {
     }
 
     /**
+     * Expects the current test to have the `expected` amount of assertions. This
+     * number cannot be less than 1.
+     *
+     * Note that it is generally preferred to use `expect.step` and `expect.verifySteps`
+     * instead as it is more reliable and allows to test more extensively.
+     *
      * @param {number} expected
      */
     function assertions(expected) {
@@ -605,10 +620,10 @@ export function makeExpect(params) {
             return false;
         }
         const { errors, options } = resolver;
-        const actualErrors = currentResult.currentErrors;
+        const { currentErrors } = currentResult;
         const pass =
-            actualErrors.length === errors.length &&
-            actualErrors.every(
+            currentErrors.length === errors.length &&
+            currentErrors.every(
                 (error, i) =>
                     match(error, errors[i]) || (error.cause && match(error.cause, errors[i]))
             );
@@ -623,12 +638,13 @@ export function makeExpect(params) {
                 : "expected the following errors";
             const assertion = {
                 label: "verifyErrors",
+                docLabel: "expect.verifyErrors",
                 message: options?.message,
                 pass,
                 reportMessage,
             };
             if (!pass) {
-                const fActual = actualErrors.map(formatError);
+                const fActual = currentErrors.map(formatError);
                 const fExpected = errors.map(formatError);
                 assertion.failedDetails = detailsFromValuesWithDiff(fExpected, fActual);
                 assertion.stack = getStack(1);
@@ -662,6 +678,7 @@ export function makeExpect(params) {
                 : "expected the following steps";
             const assertion = {
                 label: "verifySteps",
+                docLabel: "expect.verifySteps",
                 message: options?.message,
                 pass,
                 reportMessage,
@@ -677,6 +694,11 @@ export function makeExpect(params) {
     }
 
     /**
+     * Expects the current test to have the `expected` amount of errors.
+     *
+     * This also means that from the moment this function is called, the test will
+     * accept that amount of errors before being considered as failed.
+     *
      * @param {number} expected
      */
     function errors(expected) {
@@ -718,6 +740,9 @@ export function makeExpect(params) {
     }
 
     /**
+     * Registers a step for the current test, that can be consumed by `expect.verifySteps`.
+     * Unconsumed steps will fail the test.
+     *
      * @param {unknown} value
      */
     function step(value) {
@@ -746,6 +771,11 @@ export function makeExpect(params) {
             throw scopeError("expect.verifyErrors");
         }
         ensureArguments(arguments, "any[]", ["object", null]);
+        if (errors.length > currentResult.expectedErrors) {
+            throw new HootError(
+                `cannot call \`expect.verifyErrors()\` without calling \`expect.errors()\` beforehand`
+            );
+        }
 
         return checkErrors({ errors, options }, true);
     }
@@ -759,6 +789,8 @@ export function makeExpect(params) {
      * @param {VerifierOptions} [options]
      * @returns {boolean}
      * @example
+     *  expect.step("web_read_group");
+     *  expect.step([1, 2]);
      *  expect.verifySteps(["web_read_group", "web_search_read"]);
      */
     function verifySteps(steps, options) {
@@ -772,8 +804,8 @@ export function makeExpect(params) {
 
     /**
      * Same as {@link verifyErrors}, but will not immediatly fail if errors are
-     * not caught yet, and will instead wait for a certain timeout (default: 2000ms)
-     * to allow errors to be caught later.
+     * not caught yet, and will instead wait for a certain timeout (see
+     * `waitUntil`) to allow errors to be caught later.
      *
      * Checks are performed initially, at the end of the timeout, and each time
      * an error is detected.
@@ -805,7 +837,7 @@ export function makeExpect(params) {
             options,
             timeout: setTimeout(
                 () => checkErrors(currentResult.errorResolver, true),
-                options?.timeout ?? 2000
+                options?.timeout ?? _getDefaultWaitTimeout()
             ),
         };
         return currentResult.errorResolver.promise;
@@ -813,8 +845,8 @@ export function makeExpect(params) {
 
     /**
      * Same as {@link verifySteps}, but will not immediatly fail if steps have not
-     * been registered yet, and will instead wait for a certain timeout (default:
-     * 2000ms) to allow steps to be registered later.
+     * been registered yet, and will instead wait for a certain timeout (see
+     * `waitUntil`) to allow steps to be registered later.
      *
      * Checks are performed initially, at the end of the timeout, and each time
      * a step is registered.
@@ -846,7 +878,7 @@ export function makeExpect(params) {
             options,
             timeout: setTimeout(
                 () => checkSteps(currentResult.stepResolver, true),
-                options?.timeout ?? 2000
+                options?.timeout ?? _getDefaultWaitTimeout()
             ),
         };
         return currentResult.stepResolver.promise;
@@ -986,6 +1018,9 @@ export class CaseResult {
         this.counts[type]++;
         switch (type) {
             case "assertion": {
+                if (value && this.headless) {
+                    delete value.docLabel; // Only required in UI
+                }
                 caseEvent = new Assertion(this.counts.assertion, value);
                 this.pass &&= caseEvent.pass;
                 break;
@@ -1010,7 +1045,7 @@ export class CaseResult {
             }
         }
         if (caseEvent) {
-            if (logger.allows("debug") && CASE_EVENT_LOG_COLORS.includes(type)) {
+            if (logger.canLog("debug") && CASE_EVENT_LOG_COLORS.includes(type)) {
                 const colorName = caseEvent.pass === false ? "rose" : CASE_EVENT_TYPES[type].color;
                 const logArgs = [[caseEvent.label, getColorHex(colorName)]];
                 for (const part of caseEvent.message) {
@@ -1203,7 +1238,7 @@ export class Matcher {
         return this._resolve(() => ({
             name: "toBeEmpty",
             acceptedType: ["any"],
-            predicate: (received) => isEmpty(received),
+            predicate: (received) => _isEmpty(received),
             message: options?.message,
             onPass: () => [this._received, r`should[! not] be empty`],
             onFail: () => [this._received, r`is[! not] empty`],
@@ -1611,7 +1646,7 @@ export class Matcher {
             predicate: (checked) => !!checked,
             message: options?.message,
             onPass: () => [this._received, r`[is%are][! not] ${prop}`],
-            onFail: () => [r`expected`, this._received, r`[! not] to be ${prop}`],
+            onFail: () => [r`expected`, this._received, r`[!not ]to be ${prop}`],
             getFailedDetails: (checked) => detailsFromEntries([["Checked:", checked]]),
         }));
     }
@@ -1633,11 +1668,11 @@ export class Matcher {
         return this._resolve(() => ({
             name: "toBeDisplayed",
             acceptedType: ["string", "node", "node[]"],
-            mapElements: isNodeDisplayed,
+            mapElements: _isNodeDisplayed,
             predicate: (displayed) => !!displayed,
             message: options?.message,
             onPass: () => [this._received, r`[is%are][! not] displayed`],
-            onFail: () => [r`expected`, this._received, r`[! not] to be displayed`],
+            onFail: () => [r`expected`, this._received, r`[!not ]to be displayed`],
             getFailedDetails: (displayed) => detailsFromEntries([["Displayed:", displayed]]),
         }));
     }
@@ -1705,7 +1740,7 @@ export class Matcher {
         return this._resolve(() => ({
             name: "toBeVisible",
             acceptedType: ["string", "node", "node[]"],
-            mapElements: isNodeVisible,
+            mapElements: _isNodeVisible,
             predicate: (visible) => !!visible,
             message: options?.message,
             onPass: () => [this._received, r`[is%are] [visible!hidden]`],
@@ -1734,7 +1769,7 @@ export class Matcher {
         return this._resolve(() => ({
             name: "toHaveAttribute",
             acceptedType: ["string", "node", "node[]"],
-            mapElements: (el) => getNodeAttribute(el, attribute),
+            mapElements: (el) => _getNodeAttribute(el, attribute),
             predicate: (elAttr, el) =>
                 expectsValue ? valueMatches(elAttr, value) : el.hasAttribute(attribute),
             message: options?.message,
@@ -1933,7 +1968,7 @@ export class Matcher {
         this._ensureArguments(arguments, ["object", "string", "node", "node[]"]);
 
         let refRect;
-        if (typeof rect === "string" || isNode(rect)) {
+        if (typeof rect === "string" || _isNode(rect)) {
             refRect = { ...queryRect(rect, options) };
         } else {
             refRect = rect;
@@ -1944,7 +1979,7 @@ export class Matcher {
         return this._resolve(() => ({
             name: "toHaveRect",
             acceptedType: ["string", "node", "node[]"],
-            mapElements: (el) => getNodeRect(el, options),
+            mapElements: (el) => _getNodeRect(el, options),
             predicate: (elRect) => entries.every(([key, val]) => strictEqual(elRect[key], val)),
             message: options?.message,
             onPass: () => [this._received, r`[has%have] the expected DOM rect of`, rect],
@@ -2014,11 +2049,11 @@ export class Matcher {
         return this._resolve(() => ({
             name: "toHaveText",
             acceptedType: ["string", "node", "node[]"],
-            mapElements: (el) => getNodeText(el, options),
+            mapElements: (el) => _getNodeText(el, options),
             predicate: (elText) => (expectsText ? valueMatches(elText, text) : elText.length > 0),
             message: options?.message,
             onPass: () => [this._received, r`[[has%have]![does%do] not have] text`, text],
-            onFail: () => [r`expected`, this._received, r`[! not] to have the given text`],
+            onFail: () => [r`expected`, this._received, r`[!not ]to have the given text`],
             getFailedDetails: (elText) => detailsFromValuesWithDiff(text, elText),
         }));
     }
@@ -2029,14 +2064,16 @@ export class Matcher {
      * - match a given regular expression;
      * - contain file objects matching the given `files` list.
      *
-     * @param {ReturnType<typeof getNodeValue>} [value]
-     * @param {ExpectOptions} [options]
+     * @param {ReturnType<typeof _getNodeValue>} [value]
+     * @param {ExpectOptions & { raw?: boolean }} [options]
      * @example
-     *  expect("input[type=email]").toHaveValue("john@doe.com");
+     *  expect("input[name=age]").toHaveValue(29);
      * @example
      *  expect("input[type=file]").toHaveValue(new File(["foo"], "foo.txt"));
      * @example
      *  expect("select[multiple]").toHaveValue(["foo", "bar"]);
+     * @example
+     *  expect("input[name=age]").toHaveValue("29", { raw: true });
      */
     toHaveValue(value, options) {
         this._ensureArguments(arguments, [
@@ -2053,9 +2090,9 @@ export class Matcher {
         return this._resolve(() => ({
             name: "toHaveValue",
             acceptedType: ["string", "node", "node[]"],
-            mapElements: (el) => getNodeValue(el),
+            mapElements: (el) => _getNodeValue(el, options?.raw),
             predicate: (elValue, el) => {
-                if (isCheckable(el)) {
+                if (_isCheckable(el)) {
                     throw new HootError(
                         `cannot call \`toHaveValue()\` on a checkbox or radio input: use \`toBeChecked()\` instead`
                     );
@@ -2073,7 +2110,7 @@ export class Matcher {
             },
             message: options?.message,
             onPass: () => [this._received, r`[[has%have]![does%do] not have] value`, value],
-            onFail: () => [r`expected`, this._received, r`[! not] to have the given value`],
+            onFail: () => [r`expected`, this._received, r`[!not ]to have the given value`],
             getFailedDetails: (elValue) => detailsFromValuesWithDiff(value, elValue),
         }));
     }
@@ -2199,10 +2236,17 @@ export class Matcher {
 
         const types = ensureArray(acceptedType);
         if (!types.some((type) => isOfType(this._received, type))) {
+            const joinedTypes =
+                types.length > 1
+                    ? new ListFormat("en-GB", {
+                          type: "disjunction",
+                          style: "long",
+                      }).format(types)
+                    : types[0];
             throw new TypeError(
-                `expected received value to be of type ${listJoin(types, ",", "or").join(
-                    " "
-                )}, got ${formatHumanReadable(this._received)}`
+                `expected received value to be of type ${joinedTypes}, got ${formatHumanReadable(
+                    this._received
+                )}`
             );
         }
 
@@ -2298,11 +2342,14 @@ export class CaseEvent {
 export class Assertion extends CaseEvent {
     /** @type {string | null | undefined} */
     additionalMessage;
+    /** @type {string | undefined} */
+    docLabel;
     type = CASE_EVENT_TYPES.assertion.value;
 
     /**
      * @param {number} number
      * @param {Partial<Assertion & {
+     *  docLabel?: string;
      *  message: AssertionMessage,
      *  reportMessage: AssertionReportMessage,
      * }>} values
@@ -2310,6 +2357,7 @@ export class Assertion extends CaseEvent {
     constructor(number, values) {
         super();
 
+        this.docLabel = values.docLabel;
         this.label = values.label;
         this.flags = values.flags || 0;
         this.pass = values.pass || false;
@@ -2326,14 +2374,14 @@ export class Assertion extends CaseEvent {
 
         // Message
         if (typeof message === "function") {
-            this.additionalMessage = message();
+            this.additionalMessage = message(this.pass);
         } else {
             this.additionalMessage = message;
         }
 
         // Reporting message
         if (typeof reportMessage === "function") {
-            reportMessage = reportMessage(this.pass, r);
+            reportMessage = reportMessage(this.pass);
         }
         const parts =
             $isArray(reportMessage) && !isLabel(reportMessage)
@@ -2386,11 +2434,16 @@ export class DOMCaseEvent extends CaseEvent {
      * @param {InteractionType} type
      * @param {InteractionDetails} details
      */
-    constructor(type, [name, args, returnValue]) {
+    constructor(type, [name, alias, args, returnValue]) {
         super();
 
         this.type = CASE_EVENT_TYPES[type].value;
-        this.label = name;
+        this.label = alias || name;
+        if (type === "server") {
+            this.docLabel = mockFetch.name;
+        } else {
+            this.docLabel = name;
+        }
         for (let i = 0; i < args.length; i++) {
             if (args[i] !== undefined && (i === 0 || typeof args[i] !== "object")) {
                 this.message.push(makeLabelOrString(args[i]));
@@ -2417,12 +2470,20 @@ export class CaseError extends CaseEvent {
         this.message = error.message.split(R_WHITE_SPACE);
         /** @type {string} */
         this.stack = error.stack;
+
+        // Ensures that the stack contains the error name & message.
+        // This can happen when setting the 'message' after creating the error.
+        const errorNameAndMessage = String(error);
+        if (!this.stack.startsWith(errorNameAndMessage)) {
+            this.stack = errorNameAndMessage + this.stack.slice(error.name.length);
+        }
     }
 }
 
 export class Step extends CaseEvent {
     type = CASE_EVENT_TYPES.step.value;
     label = "step";
+    docLabel = "expect.step";
 
     /**
      * @param {any} value

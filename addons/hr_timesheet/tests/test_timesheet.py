@@ -309,6 +309,16 @@ class TestTimesheet(TestCommonTimesheet):
                 'project_id': False
             })
 
+    def test_favorite_project_id(self):
+        """ Test that user without previous timesheets and without
+        access to the internal project has no favorite project. """
+
+        # make internal project accessible to invited internal users only
+        self.env.company.internal_project_id.privacy_visibility = 'followers'
+
+        favorite_project = self.env['account.analytic.line'].with_user(self.user_employee)._get_favorite_project_id()
+        self.assertFalse(favorite_project, "A user without timesheet and without access to the internal project should have no favorite project.")
+
     def test_recompute_amount_for_multiple_timesheets(self):
         """ Check that amount is recomputed correctly when setting unit_amount for multiple timesheets at once. """
         Timesheet = self.env['account.analytic.line']
@@ -885,3 +895,52 @@ class TestTimesheet(TestCommonTimesheet):
             'user_id': self.user_manager.id,
         })
         self.assertEqual(timesheet.company_id, self.env.company)
+
+    def test_task_reset_on_project_change(self):
+        """ Changing the project_id of a timesheet should reset its task_id
+            if the task doesn't belong to the new project"""
+
+        self.assertTrue(self.timesheet.task_id)
+        self.timesheet.write({'project_id': self.project_customer.id})
+        self.assertFalse(self.timesheet.task_id)
+        self.assertEqual(self.timesheet.project_id, self.project_customer)
+
+    def test_is_project_overtime_filter(self):
+        self.project.allocated_hours = 3.0
+        self.assertEqual(self.project.remaining_hours, 3.0)
+        task_1, task_2 = self.env['project.task'].create([
+            {
+                'name': 'Task 1',
+                'project_id': self.project.id,
+            },
+            {
+                'name': 'Task 2 (done)',
+                'project_id': self.project.id,
+                'state': '1_done',
+            }
+        ])
+        self.env['account.analytic.line'].create([
+            {
+                'name': 'Timesheet Task 1',
+                'unit_amount': 2.0,
+                'project_id': self.project.id,
+                'employee_id': self.empl_employee.id,
+                'task_id': task_1.id,
+            },
+            {
+                'name': 'Timesheet Task 2 (done)',
+                'unit_amount': 2.0,
+                'project_id': self.project.id,
+                'employee_id': self.empl_employee.id,
+                'task_id': task_2.id,
+            },
+        ])
+        self.assertRecordValues(self.project, [{
+            'is_project_overtime': True,
+            'remaining_hours': -1.0
+        }])
+        self.project.flush_model()  # Ensures the `project.allocated_hours` is saved in the database
+        self.assertIn(
+            self.project,
+            self.env['project.project'].search([('is_project_overtime', '=', True)])
+        )

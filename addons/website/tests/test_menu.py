@@ -30,6 +30,44 @@ class TestMenu(common.TransactionCase):
 
         self.assertEqual(total_menu_items + self.nb_website * 2, Menu.search_count([]), "Creating a menu without a website_id should create this menu for every website_id")
 
+    def test_menu_visible_password_view_skips_handle_visibility(self):
+        """ When a password protected page is accessed, the request contains a
+        password. This test ensures that if a menu contains a link to another
+        password protected page, the password in the current request is never
+        tested against the linked page. """
+        View = self.env['ir.ui.view']
+        Page = self.env['website.page']
+        Menu = self.env['website.menu']
+        website_1 = self.env['website'].browse(1)
+
+        view = View.create({
+            'name': 'Protected',
+            'type': 'qweb',
+            'arch': '<div>protected</div>',
+            'key': 'test.menu_protected_view',
+            'visibility': 'password',
+        })
+        page = Page.create({
+            'view_id': view.id,
+            'url': '/menu-protected',
+            'is_published': True,
+            'website_id': website_1.id,
+        })
+        menu = Menu.create({
+            'name': 'Protected menu',
+            'page_id': page.id,
+            'website_id': website_1.id,
+        })
+
+        public_user = self.env.ref('base.public_user')
+        with MockRequest(self.env(user=public_user), website=website_1) as mock_request:
+            mock_request.params = {'visibility_password': 'secret'}
+            menu_pub = mock_request.env['website.menu'].browse(menu.id)
+            with patch.object(self.registry['ir.ui.view'], '_handle_visibility') as mocked_handle_visibility:
+                is_visible = menu_pub.is_visible
+                mocked_handle_visibility.assert_not_called()
+            self.assertTrue(is_visible)
+
     def test_02_menu_count(self):
         Menu = self.env['website.menu']
         total_menu_items = Menu.search_count([])
@@ -237,6 +275,21 @@ class TestMenu(common.TransactionCase):
         submenu.url = '/sub/slug-3'
         test_full_case(submenu)
 
+        # Test with a menu that is linked to a page
+        result = website_1.new_page(
+            name='/sub/page-3',
+            add_menu=True,
+        )
+        menu = Menu.browse(result['menu_id'])
+        page = self.env['website.page'].browse(result['page_id'])
+        self.assertEqual(menu.url, page.url, "Menu url should be the same than the page url")
+
+        with MockRequest(self.env, website=website_1), \
+             patch('odoo.addons.website.models.website_menu.url_parse', new=url_parse_mock):
+
+            self.request_url_mock = 'http://localhost:8069/sub/slug-3'
+            self.assertFalse(menu._is_active(), "Page linked, same unslug, should not match")
+
     def test_07_menu_hierarchy_validation(self):
         Menu = self.env['website.menu']
 
@@ -279,6 +332,14 @@ class TestMenu(common.TransactionCase):
         # which should raise a UserError because a main_menu had child.
         with self.assertRaises(UserError):
             self.main_menu.parent_id = self.another_menu.id
+
+    def test_08_top_level_menu_as_mega_menu(self):
+        top_menu = self.env.ref('website.main_menu')
+        self.assertFalse(top_menu.parent_id)
+        self.assertTrue(top_menu.child_id)
+
+        with self.assertRaises(UserError):
+            top_menu.is_mega_menu = True
 
 
 class TestMenuHttp(common.HttpCase):
@@ -352,6 +413,23 @@ class TestMenuHttp(common.HttpCase):
         self.assertFalse(self.menu.page_id, "M2o should have been unset as this is an anchor URL.")
         self.assertEqual(self.menu.url, self.page_url + '#anchor', "Page URL should have been properly prefixed with the referer url")
         self.assertEqual(self.page.url, self.page_url, "Page URL should not have changed")
+
+    def test_menu_special_anchors(self):
+        data = {
+            'id': self.menu.id,
+            'parent_id': self.menu.parent_id.id,
+            'name': self.menu.name,
+        }
+
+        data['url'] = '#top'
+        self.simulate_rpc_save_menu(data)
+        self.assertEqual(self.menu.url, '#top', "Menu #top anchor without a page prefix")
+        self.assertEqual(self.menu._clean_url(), '#top', "Clean URL should not have a prefix for #top anchor")
+
+        data['url'] = '#bottom'
+        self.simulate_rpc_save_menu(data)
+        self.assertEqual(self.menu.url, '#bottom', "Menu #bottom anchor without a page prefix")
+        self.assertEqual(self.menu._clean_url(), '#bottom', "Clean URL should not have a prefix for #bottom anchor")
 
     def test_03_mega_menu_translate(self):
         # Setup

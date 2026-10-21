@@ -106,7 +106,7 @@ class PaymentTransaction(models.Model):
         super()._post_process()
         for tx in self.filtered(lambda t: t.state == 'done'):
             # Validate invoices automatically once the transaction is confirmed.
-            self.invoice_ids.filtered(lambda inv: inv.state == 'draft').action_post()
+            tx.invoice_ids.filtered(lambda inv: inv.state == 'draft').action_post()
 
             # Create and post missing payments.
             # As there is nothing to reconcile for validation transactions, no payment is created
@@ -229,7 +229,10 @@ class PaymentTransaction(models.Model):
         :return: None
         """
         self.ensure_one()
-        author = self.env.user.partner_id if self.env.uid == SUPERUSER_ID else self.partner_id
+        if self.env.uid == SUPERUSER_ID or self.env.context.get('payment_backend_action'):
+            author = self.env.user.partner_id
+        else:
+            author = self.partner_id
         if self.source_transaction_id:
             for invoice in self.source_transaction_id.invoice_ids:
                 invoice.message_post(body=message, author_id=author.id)

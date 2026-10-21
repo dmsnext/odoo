@@ -443,6 +443,71 @@ test("can add new mentions when editing message", async () => {
     });
 });
 
+test("edit message with multiple mentions keeps the links", async () => {
+    const pyEnv = await startServer();
+    const partnersId = pyEnv["res.partner"].create([
+        {
+            // id: 123
+            email: "testpartner1@odoo.com",
+            name: "Test Partner",
+        },
+        {
+            // id: 1234
+            email: "testpartner2@odoo.com",
+            name: "Other Partner",
+        },
+        {
+            // id: 125
+            email: "testpartner3@odoo.com",
+            name: "Test Partner Junior",
+        },
+    ]);
+    // Craft partner id whose value is included in other partner's id, e.g. "123" and "1234".
+    // Mentions are presented by partner id and should be detected unambiguously.
+    const idOverrides = [{ id: 123 }, { id: 1234 }, { id: 125 }];
+    partnersId.forEach((p, i) => {
+        pyEnv["res.partner"].write(p, idOverrides[i]);
+    });
+
+    pyEnv["mail.message"].create([{
+        author_id: serverState.partnerId,
+        body: "@Other Partner says hi to @Test Partner",
+        model: "res.partner",
+        message_type: "comment",
+        partner_ids: [123, 1234],
+        res_id: serverState.partnerId,
+    }, {
+        author_id: serverState.partnerId,
+        body: "@Test Partner Junior says hi to @Test Partner",
+        model: "res.partner",
+        message_type: "comment",
+        partner_ids: [123, 125],
+        res_id: serverState.partnerId,
+    }]);
+    await start();
+    await openFormView("res.partner", serverState.partnerId);
+    await click(".o-mail-Message:eq(0) [title='Expand']");
+    await click(".o-dropdown-item", { text: "Edit" });
+    await insertText(".o-mail-Message:eq(0) .o-mail-Composer-input", " with edit");
+    await click(".o-mail-Message a", { text: "save" });
+    await contains('.o-mail-Message:eq(0) a.o_mail_redirect[data-oe-id="125"]', {
+        text: "@Test Partner Junior",
+    });
+    await contains('.o-mail-Message:eq(0) a.o_mail_redirect[data-oe-id="123"]', {
+        text: "@Test Partner",
+    });
+    await click(".o-mail-Message:eq(1) [title='Expand']");
+    await click(".o-dropdown-item", { text: "Edit" });
+    await insertText(".o-mail-Message:eq(1) .o-mail-Composer-input", " with edit");
+    await click(".o-mail-Message a", { text: "save" });
+    await contains('.o-mail-Message:eq(1) a.o_mail_redirect[data-oe-id="1234"]', {
+        text: "@Other Partner",
+    });
+    await contains('.o-mail-Message:eq(1) a.o_mail_redirect[data-oe-id="123"]', {
+        text: "@Test Partner",
+    });
+});
+
 test("Other messages are grayed out when replying to another one", async () => {
     const pyEnv = await startServer();
     const channelId = pyEnv["discuss.channel"].create({
@@ -1081,7 +1146,7 @@ test('Quick edit (edit from Composer with ArrowUp) ignores empty ("deleted") mes
     await contains(".o-mail-Message .o-mail-Composer-input", { value: "not empty" });
 });
 
-test("Editing a message to clear its composer opens message delete dialog.", async () => {
+test("Can delete a message", async () => {
     const pyEnv = await startServer();
     const channelId = pyEnv["discuss.channel"].create({
         name: "general",
@@ -1091,16 +1156,20 @@ test("Editing a message to clear its composer opens message delete dialog.", asy
         author_id: serverState.partnerId,
         body: "not empty",
         model: "discuss.channel",
+        subject: "Hello, wanderer",
         res_id: channelId,
         message_type: "comment",
     });
     await start();
     await openDiscuss(channelId);
+    await contains(".o-mail-Message");
     await click(".o-mail-Message [title='Expand']");
     await click(".o-mail-Message-moreMenu [title='Edit']");
     await insertText(".o-mail-Message.o-editing .o-mail-Composer-input", "", { replace: true });
     triggerHotkey("Enter");
     await contains(".modal-body p", { text: "Are you sure you want to delete this message?" });
+    await click("button:text('Confirm')");
+    await contains(".o-mail-Message", { count: 0 });
 });
 
 test("Clear message body should not open message delete dialog if it has attachments", async () => {
@@ -1967,4 +2036,32 @@ test("Copy Message Link", async () => {
     await press(["ctrl", "v"]);
     await click(".o-mail-Composer-send:enabled");
     await contains(".o-mail-Message", { text: url(`/mail/message/${messageId_2}`) });
+});
+
+test("Notification sent for nameless partner", async () => {
+    const pyEnv = await startServer();
+    const partnerId = pyEnv["res.partner"].create(
+        {
+            type: 'invoice',
+            email: 'invoice@test.example.com',
+            parent_id: serverState.partnerId,
+        }
+    );
+    const messageId = pyEnv["mail.message"].create({
+        body: "Hello",
+        model: "res.partner",
+        partner_ids: [partnerId],
+        res_id: serverState.partnerId,
+        message_type: "comment",
+    });
+    pyEnv["mail.notification"].create({
+        mail_message_id: messageId,
+        notification_status: "sent",
+        notification_type: "email",
+        res_partner_id: partnerId,
+    });
+    await start();
+    await openFormView("res.partner", serverState.partnerId);
+    await click(".o-mail-Message-notification");
+    await contains(".o-mail-MessageNotificationPopover", { text: "Mitchell Admin, Invoice Address" });
 });

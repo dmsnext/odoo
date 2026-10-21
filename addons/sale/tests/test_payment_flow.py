@@ -325,6 +325,45 @@ class TestSalePayment(AccountPaymentCommon, SaleCommon, PaymentHttpCommon, MailC
         self.assertEqual(len(self._new_mails), 2)
         self.assertTrue(self._new_mails.filtered(lambda x: 'Invoice' in x.subject))
 
+    def test_partial_payments_generate_invoices_for_the_payment_amount(self):
+        self.env["ir.config_parameter"].sudo().set_param("sale.automatic_invoice", "True")
+        self.sale_order.action_confirm()
+
+        first_tx = self._create_transaction(
+            flow="direct",
+            amount=200.0,
+            sale_order_ids=self.sale_order.ids,
+            state="done",
+            reference="First partial payment",
+        )
+        with mute_logger("odoo.addons.sale.models.payment_transaction"):
+            first_tx._post_process()
+        self.assertEqual(first_tx.invoice_ids.amount_total, 200.0)
+
+        second_tx = self._create_transaction(
+            flow="direct",
+            amount=300.0,
+            sale_order_ids=self.sale_order.ids,
+            state="done",
+            reference="Second partial payment",
+        )
+        with mute_logger("odoo.addons.sale.models.payment_transaction"):
+            second_tx._post_process()
+        self.assertEqual(second_tx.invoice_ids.amount_total, 300.0)
+
+        third_tx = self._create_transaction(
+            flow="direct",
+            amount=225.0,
+            sale_order_ids=self.sale_order.ids,
+            state="done",
+            reference="Third partial payment",
+        )
+        with mute_logger("odoo.addons.sale.models.payment_transaction"):
+            third_tx._post_process()
+        self.assertEqual(third_tx.invoice_ids.amount_total, 225.0)
+
+        self.assertEqual(sum(self.sale_order.invoice_ids.mapped("amount_total")), 725.0)
+
     def test_auto_done_and_auto_invoice(self):
         # Set automatic invoice
         self.env['ir.config_parameter'].sudo().set_param('sale.automatic_invoice', 'True')
@@ -637,8 +676,12 @@ class TestSalePayment(AccountPaymentCommon, SaleCommon, PaymentHttpCommon, MailC
             tx_done._post_process()
 
             self.assertEqual(notification_mail_mock.call_count, 2)
-            notification_mail_mock.assert_called_with(
-                self.env.ref('sale.mail_template_sale_confirmation'))
+            order_confirmation_mail_template_id = int(
+                self.env["ir.config_parameter"]
+                .sudo()
+                .get_param("sale.default_confirmation_template", self.env.ref("sale.mail_template_sale_confirmation").id)
+            )
+            notification_mail_mock.assert_called_with(self.env["mail.template"].browse(order_confirmation_mail_template_id))
             self.assertEqual(self.sale_order.state, 'sale')
 
     def test_automatic_invoice_mail_author(self):
@@ -677,3 +720,36 @@ class TestSalePayment(AccountPaymentCommon, SaleCommon, PaymentHttpCommon, MailC
         self.assertTrue(invoice.is_move_sent, "Invoice should be marked as sent")
         invoice_sent_mail = invoice.message_ids[0]
         self.assertTrue(invoice_sent_mail.author_id.id not in invoice_sent_mail.notified_partner_ids.ids)
+
+    def test_refund_message_author_is_logged_in_user_for_sale_order(self):
+        """Ensure that the chatter message author is the user processing the refund."""
+        self.provider.support_refund = 'full_only'
+
+        tx = self._create_transaction(
+            'redirect',
+            sale_order_ids=[self.sale_order.id],
+            state='done',
+        )
+        tx._post_process()
+
+        with patch.object(
+            self.env.registry['mail.thread'], 'message_post', autospec=True
+        ) as message_post_mock:
+            tx.action_refund()
+            author_id = message_post_mock.call_args[1].get("author_id")
+
+        self.assertEqual(author_id, self.user.partner_id.id)
+
+    def test_payment_linking_when_invoice_already_created(self):
+        """
+        Example of when this will occur: ACH Direct Debit has a delay, user creates invoice, _invoice_sale_orders eventually hits and
+        removes connection between invoice and transaction
+        """
+        transaction = self._create_transaction("redirect", sale_order_ids=self.sale_order, state="pending")
+        self.sale_order.action_confirm()
+        invoice = self.sale_order._create_invoices()
+
+        transaction._set_done()
+        transaction._invoice_sale_orders()
+
+        self.assertEqual(transaction.invoice_ids, invoice, "Invoice id was incorrectly removed from payment.transaction")

@@ -20,11 +20,13 @@ def get_demo_vendor_bill(user):
         'direction': 'incoming',
         'receiver': user.edi_identification,
         'uuid': f'{user.company_id.id}_demo_vendor_bill',
+        'origin_message_uuid': f'{user.company_id.id}_demo_vendor_bill',
         'accounting_supplier_party': '0208:2718281828',
         'state': 'done',
         'filename': f'{user.company_id.id}_demo_vendor_bill',
         'enc_key': file_open(DEMO_ENC_KEY, mode='rb').read(),
         'document': file_open(DEMO_BILL_PATH, mode='rb').read(),
+        'document_type': 'Invoice',
     }
 
 
@@ -54,7 +56,11 @@ def _mock_call_peppol_proxy(func, self, *args, **kwargs):
         message_uuid = args[1]['message_uuids'][0]
         if message_uuid.endswith('_demo_vendor_bill'):
             return {message_uuid: get_demo_vendor_bill(user)}
-        return {message_uuid: {'state': 'done'}}
+        return {message_uuid: {
+            'state': 'done',
+            'origin_message_uuid': message_uuid,
+            'document_type': 'Invoice',
+        }}
 
     def _mock_send_document(user, args, kwargs):
         # Trigger the reception of vendor bills
@@ -70,6 +76,22 @@ def _mock_call_peppol_proxy(func, self, *args, **kwargs):
             } for i in args[1]['documents']],
         }
 
+    def _mock_unregister_to_sender(user, args, kwargs):
+        user.company_id.account_peppol_proxy_state = 'sender'
+        return True
+
+    def _mock_participant_status(user, args, kwargs):
+        company = user.company_id
+        if (
+            company != company.peppol_parent_company_id
+            and company.peppol_can_send
+            and company.peppol_parent_company_id.peppol_can_send
+        ):
+            # Connected as a branch.
+            return {'peppol_state': 'sender'}
+        else:
+            return {'peppol_state': 'receiver'}
+
     endpoint = args[0].split('/')[-1]
     return {
         'ack': lambda _user, _args, _kwargs: {},
@@ -77,12 +99,15 @@ def _mock_call_peppol_proxy(func, self, *args, **kwargs):
         'register_sender': lambda _user, _args, _kwargs: {},
         'register_receiver': lambda _user, _args, _kwargs: {},
         'register_sender_as_receiver': lambda _user, _args, _kwargs: {},
+        'unregister_to_sender': _mock_unregister_to_sender,
         'get_all_documents': _mock_get_all_documents,
         'get_document': _mock_get_document,
-        'participant_status': lambda _user, _args, _kwargs: {'peppol_state': 'receiver'},
+        'participant_status': _mock_participant_status,
         'send_document': _mock_send_document,
+        'get_services': lambda _user, _args, _kwargs: {'services': []},
         'add_services': lambda _user, _args, _kwargs: {},
         'remove_services': lambda _user, _args, _kwargs: {},
+        'cancel_peppol_registration': lambda _user, _args, _kwargs: {},
     }[endpoint](self, args, kwargs)
 
 
@@ -94,8 +119,6 @@ def _mock_button_verify_partner_endpoint(func, self, *args, **kwargs):
     state = _mock_get_peppol_verification_state(func, self, endpoint, eas, edi_format)
     self.with_company(company).peppol_verification_state = state
     self._log_verification_state_update(company, old_value, state)
-    if state == 'valid':
-        self.with_company(company).invoice_sending_method = 'peppol'
 
 
 def _mock_get_peppol_verification_state(func, self, *args, **kwargs):
@@ -183,15 +206,48 @@ def _mock_update_user_data(func, self, *args, **kwargs):
 
 
 def _mock_migrate_participant(func, self, *args, **kwargs):
-    self.company_id.account_peppol_migration_key = 'demo_migration_key'
+    self.company_id.sudo().account_peppol_migration_key = 'demo_migration_key'
 
 
 def _mock_check_company_on_peppol(func, self, *args, **kwargs):
     pass
 
 
+def _mock_peppol_deregister_participant(func, self, *args, **kwargs):
+    self.company_id._reset_peppol_configuration()
+    self.unlink()
+
+
+def _mock_can_receive_self_billing(func, self, *args, **kwargs):
+    return True
+
+
+def _mock_peppol_can_connect(func, self, *args, **kwargs):
+    return {'auth_required': False}
+
+
+def _mock_peppol_create_connection(func, self, *args, **kwargs):
+    peppol_identifier = kwargs['peppol_identifier'] if 'peppol_identifier' in kwargs else args[0]
+    edi_user = self.env['account_edi_proxy_client.user'].sudo().create({
+        'id_client': f'demo{self.id}peppol',
+        'company_id': self.id,
+        'proxy_type': 'peppol',
+        'edi_mode': 'demo',
+        'edi_identification': peppol_identifier,
+        'private_key_id': self.env['certificate.key'].create({
+            'content': b64encode(file_open(DEMO_PRIVATE_KEY, 'rb').read()),
+            'company_id': self.id,
+        }).id,
+        'refresh_token': 'demo',
+    })
+    self.account_peppol_proxy_state = 'receiver'
+    return edi_user
+
+
 _demo_behaviour = {
     '_call_peppol_proxy': _mock_call_peppol_proxy,
+    '_peppol_can_connect': _mock_peppol_can_connect,
+    '_peppol_create_connection': _mock_peppol_create_connection,
     'button_account_peppol_check_partner_endpoint': _mock_button_verify_partner_endpoint,
     '_get_peppol_verification_state': _mock_get_peppol_verification_state,
     '_peppol_migrate_registration': _mock_migrate_participant,
@@ -202,6 +258,8 @@ _demo_behaviour = {
     'button_check_peppol_verification_code': _mock_check_verification_code,
     'button_register_peppol_participant': _mock_user_creation,
     '_check_company_on_peppol': _mock_check_company_on_peppol,
+    '_peppol_deregister_participant': _mock_peppol_deregister_participant,
+    '_can_receive_self_billing': _mock_can_receive_self_billing,
 }
 
 # -------------------------------------------------------------------------

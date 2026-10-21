@@ -1,4 +1,4 @@
-import { test } from "@odoo/hoot";
+import { expect, test } from "@odoo/hoot";
 import { mockUserAgent } from "@odoo/hoot-mock";
 import {
     assertSteps,
@@ -84,6 +84,43 @@ test("translation of email message", async () => {
     });
 });
 
+test.tags("desktop");
+test("Do not show translate action if message body is empty", async () => {
+    const pyEnv = await startServer();
+    const partnerId = pyEnv["res.partner"].create({});
+    const subtypeId = pyEnv["mail.message.subtype"].create({ description: "Task created" });
+    const attachmentId = pyEnv["ir.attachment"].create({
+        mimetype: "text/plain",
+        name: "Blah.txt",
+    });
+    pyEnv["mail.message"].create([
+        {
+            model: "res.partner",
+            body: '<div summary="o_mail_notification"><p>Not Empty</p></div>',
+            message_type: "notification",
+            res_id: partnerId,
+            subtype_id: subtypeId,
+        },
+        {
+            attachment_ids: [attachmentId],
+            model: "res.partner",
+            res_id: partnerId,
+        },
+        {
+            model: "res.partner",
+            body: "Not Empty",
+            res_id: partnerId,
+        },
+    ]);
+    await start();
+    await openFormView("res.partner", partnerId);
+    await contains(".o-mail-Message", { count: 3 });
+    expect("button[title='Expand']").toHaveCount(0);
+    expect(".o-mail-Message:eq(0) [title='Translate']").toHaveCount(1);
+    expect(".o-mail-Message:eq(1) [title='Translate']").toHaveCount(0);
+    expect(".o-mail-Message:eq(2) [title='Translate']").toHaveCount(0);
+});
+
 test.tags("mobile");
 test("Toggle message translation on mobile", async () => {
     const pyEnv = await startServer();
@@ -97,7 +134,7 @@ test("Toggle message translation on mobile", async () => {
     onRpcBefore("/mail/message/translate", () => {
         return { body: "To bad weather, good face.", lang_name: "Spanish", error: null };
     });
-    mockUserAgent("Chrome/0.0.0 Android (OdooMobile; Linux; Android 13; Odoo TestSuite)");
+    mockUserAgent("android");
     await start();
     await openFormView("res.partner", partnerId);
     await click("button[title='Expand']");

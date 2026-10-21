@@ -3,9 +3,14 @@
 import re
 from stdnum import get_cc_module, ean
 
-from odoo import _, api, fields, models
-from odoo.exceptions import ValidationError
+from odoo import _, api, fields, models, modules, tools
+from odoo.exceptions import UserError, ValidationError
+from odoo.tools.misc import hash_sign, verify_hash_signed
+
 from odoo.addons.account.models.company import PEPPOL_LIST
+from odoo.addons.account_edi_ubl_cii.models.account_edi_common import EAS_MAPPING
+from ..tools.peppol_iap_connector import PeppolIAPConnector
+from ..tools.demo_utils import handle_demo
 
 try:
     import phonenumbers
@@ -54,12 +59,14 @@ class ResCompany(models.Model):
         compute='_compute_account_peppol_contact_email', store=True, readonly=False,
         help='Primary contact email for Peppol connection related communications and notifications.\n'
              'In particular, this email is used by Odoo to reconnect your Peppol account in case of database change.',
+        groups='base.group_user',
     )
-    account_peppol_migration_key = fields.Char(string="Migration Key")
+    account_peppol_migration_key = fields.Char(string="Migration Key", groups="base.group_system")
     account_peppol_phone_number = fields.Char(
         string='Mobile number',
         compute='_compute_account_peppol_phone_number', store=True, readonly=False,
         help='This number is used for identification purposes only.',
+        groups='base.group_user',
     )
     account_peppol_proxy_state = fields.Selection(
         selection=[
@@ -72,6 +79,10 @@ class ResCompany(models.Model):
         ],
         string='PEPPOL status', required=True, default='not_registered',
     )
+    account_peppol_edi_user = fields.Many2one(
+        comodel_name='account_edi_proxy_client.user',
+        compute='_compute_account_peppol_edi_user',
+    )
     peppol_eas = fields.Selection(related='partner_id.peppol_eas', readonly=False)
     peppol_endpoint = fields.Char(related='partner_id.peppol_endpoint', readonly=False)
     peppol_purchase_journal_id = fields.Many2one(
@@ -81,10 +92,35 @@ class ResCompany(models.Model):
         compute='_compute_peppol_purchase_journal_id', store=True, readonly=False,
         inverse='_inverse_peppol_purchase_journal_id',
     )
+    peppol_can_send = fields.Boolean(compute='_compute_peppol_can_send')
+    peppol_parent_company_id = fields.Many2one(
+        comodel_name='res.company',
+        compute='_compute_peppol_parent_company_id',
+        compute_sudo=True,
+    )
 
     # -------------------------------------------------------------------------
     # HELPER METHODS
     # -------------------------------------------------------------------------
+
+    def _reset_peppol_configuration(self):
+        """
+        Reset all peppol configuration fields to their default value before registering.
+        The EAS, endpoint, email, and phone number will be recomputed so that branch companies that uses
+        their parent configuration can have their default values back
+        (as these fields will be overwritten for them when they register as parent).
+        """
+        self.account_peppol_proxy_state = 'not_registered'
+        self.sudo().account_peppol_migration_key = False
+        self.peppol_eas = False
+        self.peppol_endpoint = False
+        self.account_peppol_contact_email = False
+        self.account_peppol_phone_number = False
+
+        self.partner_id._compute_peppol_eas()
+        self.partner_id._compute_peppol_endpoint()
+        self._compute_account_peppol_contact_email()
+        self._compute_account_peppol_phone_number()
 
     @api.model
     def _check_phonenumbers_import(self):
@@ -96,8 +132,7 @@ class ResCompany(models.Model):
 
         error_message = _(
             "Please enter the mobile number in the correct international format.\n"
-            "For example: +32123456789, where +32 is the country code.\n"
-            "Currently, only European countries are supported.")
+            "For example: +32123456789, where +32 is the country code.")
 
         self._check_phonenumbers_import()
 
@@ -113,8 +148,7 @@ class ResCompany(models.Model):
         except phonenumbers.phonenumberutil.NumberParseException:
             raise ValidationError(error_message)
 
-        country_code = phonenumbers.phonenumberutil.region_code_for_number(phone_nbr)
-        if country_code not in PEPPOL_LIST or not phonenumbers.is_valid_number(phone_nbr):
+        if not phonenumbers.is_valid_number(phone_nbr):
             raise ValidationError(error_message)
 
     def _check_peppol_endpoint_number(self, warning=False):
@@ -122,6 +156,23 @@ class ResCompany(models.Model):
         peppol_dict = PEPPOL_ENDPOINT_WARNINGS if warning else PEPPOL_ENDPOINT_RULES
 
         return True if (endpoint_rule := peppol_dict.get(self.peppol_eas)) is None else endpoint_rule(self.peppol_endpoint)
+
+    def _get_einvoicing_network_name(self):
+        """Return the user-facing name of the company's e-invoicing network or platform."""
+        self.ensure_one()
+        return self.env._("Peppol")
+
+    def _get_einvoicing_identifier_name(self):
+        """Return the user-facing name of an identifier on the network."""
+        self.ensure_one()
+        return self.env._("Peppol EAS and/or Endpoint identifier")
+
+    def _peppol_is_french_company(self):
+        self.ensure_one()
+        return (
+            self.account_fiscal_country_id.code in {'FR', 'GP', 'MQ', 'RE'}
+            or self.peppol_eas in EAS_MAPPING['FR']
+        )
 
     # -------------------------------------------------------------------------
     # CONSTRAINTS
@@ -147,9 +198,38 @@ class ResCompany(models.Model):
             if company.peppol_purchase_journal_id and company.peppol_purchase_journal_id.type != 'purchase':
                 raise ValidationError(_("A purchase journal must be used to receive Peppol documents."))
 
+    def _peppol_allows_document_reception(self):
+        self.ensure_one()
+        return True
+
     # -------------------------------------------------------------------------
     # COMPUTE METHODS
     # -------------------------------------------------------------------------
+
+    @api.depends('account_edi_proxy_client_ids')
+    def _compute_account_peppol_edi_user(self):
+        for company in self:
+            company.account_peppol_edi_user = company.account_edi_proxy_client_ids.filtered(
+                lambda u: u.proxy_type in self.env['account_edi_proxy_client.user']._get_peppol_proxy_types()
+            )
+
+    @api.depends('peppol_eas', 'peppol_endpoint')
+    def _compute_peppol_parent_company_id(self):
+        self.peppol_parent_company_id = False
+        for company in self:
+            for parent_company in company.parent_ids[::-1][1:]:
+                if (
+                    company.peppol_eas
+                    and company.peppol_endpoint
+                    and company.peppol_eas == parent_company.peppol_eas
+                    and company.peppol_endpoint == parent_company.peppol_endpoint
+                ) or (
+                    not company.peppol_endpoint
+                    and parent_company.peppol_eas
+                    and parent_company.peppol_endpoint
+                ):
+                    company.peppol_parent_company_id = parent_company
+                    break
 
     @api.depends('account_peppol_proxy_state')
     def _compute_peppol_purchase_journal_id(self):
@@ -165,10 +245,11 @@ class ResCompany(models.Model):
 
     def _inverse_peppol_purchase_journal_id(self):
         for company in self:
-            # This avoid having 2 or more journals from the same company with
+            # This avoid having 2 or more purchase journals from the same company with
             # `is_peppol_journal` set to True (which could occur after changes).
             journals_to_reset = self.env['account.journal'].search([
                 ('company_id', '=', company.id),
+                ('type', '=', 'purchase'),
                 ('is_peppol_journal', '=', True),
             ])
             journals_to_reset.is_peppol_journal = False
@@ -190,6 +271,12 @@ class ResCompany(models.Model):
                     company.account_peppol_phone_number = company.phone
                 except ValidationError:
                     continue
+
+    @api.depends('account_peppol_proxy_state')
+    def _compute_peppol_can_send(self):
+        can_send_domain = self.env['account_edi_proxy_client.user']._get_can_send_domain()
+        for company in self:
+            company.peppol_can_send = company.account_peppol_proxy_state in can_send_domain
 
     # -------------------------------------------------------------------------
     # LOW-LEVEL METHODS
@@ -256,18 +343,10 @@ class ResCompany(models.Model):
                     "SI-UBL 2.0 Invoice",
                 "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2::CreditNote##urn:cen.eu:en16931:2017#compliant#urn:fdc:nen.nl:nlcius:v1.0::2.1":
                     "SI-UBL 2.0 CreditNote",
-                "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#conformant#urn:fdc:peppol.eu:2017:poacc:billing:international:sg:3.0::2.1":
-                    "SG Peppol BIS Billing 3.0 Invoice",
-                "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2::CreditNote##urn:cen.eu:en16931:2017#conformant#urn:fdc:peppol.eu:2017:poacc:billing:international:sg:3.0::2.1":
-                    "SG Peppol BIS Billing 3.0 Credit Note",
-                "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0::2.1":
-                    "XRechnung UBL Invoice V2.0",
-                "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2::CreditNote##urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0::2.1":
-                    "XRechnung UBL CreditNote V2.0",
-                "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#conformant#urn:fdc:peppol.eu:2017:poacc:billing:international:aunz:3.0::2.1":
-                    "AU-NZ Peppol BIS Billing 3.0 Invoice",
-                "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2::CreditNote##urn:cen.eu:en16931:2017#conformant#urn:fdc:peppol.eu:2017:poacc:billing:international:aunz:3.0::2.1":
-                    "AU-NZ Peppol BIS Billing 3.0 CreditNote",
+                "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:selfbilling:3.0::2.1":
+                    "Peppol BIS Self-Billing UBL Invoice V3",
+                "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2::CreditNote##urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:selfbilling:3.0::2.1":
+                    "Peppol BIS Self-Billing UBL CreditNote V3",
             }
         }
 
@@ -283,6 +362,118 @@ class ResCompany(models.Model):
         self.ensure_one()
         config_param = self.env['ir.config_parameter'].sudo().get_param('account_peppol.edi.mode')
         # by design, we can only have zero or one proxy user per company with type Peppol
-        peppol_user = self.sudo().account_edi_proxy_client_ids.filtered(lambda u: u.proxy_type == 'peppol')
+        peppol_user = self.sudo().account_edi_proxy_client_ids.filtered(lambda u: u.proxy_type in self.env['account_edi_proxy_client.user']._get_peppol_proxy_types())
         demo_if_demo_identifier = 'demo' if self.peppol_eas == 'odemo' else False
         return demo_if_demo_identifier or peppol_user.edi_mode or config_param or 'prod'
+
+    def _get_peppol_proxy_type(self):
+        self.ensure_one()
+        peppol_user = self.sudo().account_edi_proxy_client_ids.filtered(
+            lambda u: u.proxy_type in self.env['account_edi_proxy_client.user']._get_peppol_proxy_types()
+        )
+        return peppol_user.proxy_type or 'peppol'
+
+    def _peppol_generate_connect_token(self, peppol_identifier):
+        self.ensure_one()
+        msg = {
+            'peppol_identifier': peppol_identifier,
+            'company_id': self.id,
+            'partner_id': self.env.user.partner_id.id,
+            'create_at': str(fields.Datetime.now()),
+        }
+        return hash_sign(self.sudo().env, 'account_peppol_connect', msg, expiration_hours=24 * 7 * 2)
+
+    @api.model
+    def _peppol_decode_connect_token(self, token):
+        if not token:
+            return None
+        try:
+            payload = verify_hash_signed(self.sudo().env, 'account_peppol_connect', token)
+        except (ValueError, TypeError):
+            return None
+        if not payload:
+            return None
+        peppol_identifier = payload.get('peppol_identifier')
+        company = self.browse(payload.get('company_id')).exists()
+        partner = self.env['res.partner'].browse(payload.get('partner_id')).exists()
+        if not peppol_identifier or not company or not partner:
+            return None
+        return {
+            'peppol_identifier': peppol_identifier,
+            'company': company,
+            'partner': partner,
+        }
+
+    @handle_demo
+    def _peppol_can_connect(self, peppol_identifier):
+        self.ensure_one()
+        base_url = self.get_base_url()
+        return PeppolIAPConnector(self).can_connect(
+            peppol_identifier=peppol_identifier,
+            db_uuid=self.env['ir.config_parameter'].sudo().get_param('database.uuid'),
+            callback_url=base_url + '/peppol/authentication/callback',
+            webhook_url=base_url + '/peppol/authentication/webhook',
+            connect_token=self._peppol_generate_connect_token(peppol_identifier),
+            contact_email=self.account_peppol_contact_email,
+        )
+
+    @api.model
+    def _peppol_select_kyc_url(self, can_connect_vals):
+        if not can_connect_vals:
+            raise UserError(_("Could not connect to Peppol proxy"))
+        identifier_invalid = can_connect_vals.get('identifier_invalid')
+        if identifier_invalid:
+            code = identifier_invalid.get('code')
+            if code == 'IDENTIFIER_NOT_ON_PEPPOL':
+                raise UserError(_("Your identifier you entered is invalid for Peppol."))
+            if code == 'IDENTIFIER_INCORRECT_FORMAT':
+                if identifier_invalid.get('example'):
+                    raise UserError(_("Your identifier does not have a valid format. Expected format: %s.", identifier_invalid.get('example')))
+                raise UserError(_("Your identifier does not have a valid format."))
+            raise UserError(_("Your identifier is invalid."))
+        if can_connect_vals.get('db_invalid'):
+            raise UserError(_("The database you are trying to connect to is not suitable for Peppol."))
+        if not can_connect_vals.get('auth_required'):
+            return None
+        available_auths = can_connect_vals.get('available_auths') or {}
+        auth = available_auths.get('generic') or next(iter(available_auths.values()), None)
+        if not auth or not auth.get('authorization_url'):
+            raise UserError(_("Authentication is required but not available. Please contact Odoo support."))
+        return auth['authorization_url']
+
+    @handle_demo
+    def _peppol_create_connection(self, peppol_identifier, auth_token=None):
+        """Register though ``/api/peppol/2/connect`` and create proxy user record"""
+        self.ensure_one()
+        edi_mode = self._get_peppol_edi_mode()
+        private_key_sudo = self.env['certificate.key'].sudo()._generate_rsa_private_key(self, name=f"peppol_{edi_mode}_{self.id}.key")
+        response = PeppolIAPConnector(self).create_connection(
+            peppol_identifier=peppol_identifier,
+            db_uuid=self.env['ir.config_parameter'].sudo().get_param('database.uuid'),
+            public_key=private_key_sudo._get_public_key_bytes(encoding='pem').decode(),
+            auth_token=auth_token,
+            peppol_company_name=self.display_name,
+            peppol_company_vat=self.vat,
+            peppol_company_street=self.street,
+            peppol_company_city=self.city,
+            peppol_company_zip=self.zip,
+            peppol_country_code=self.country_id.code,
+            peppol_phone_number=self.account_peppol_phone_number,
+            peppol_contact_email=self.account_peppol_contact_email,
+            peppol_migration_key=self.sudo().account_peppol_migration_key,
+            supported_identifiers=list(self._peppol_supported_document_types()),
+        )
+        edi_user = self.env['account_edi_proxy_client.user'].sudo().create({
+            'id_client': response['id_client'],
+            'company_id': self.id,
+            'proxy_type': 'peppol',
+            'edi_mode': edi_mode,
+            'edi_identification': peppol_identifier,
+            'private_key_id': private_key_sudo.id,
+            'refresh_token': response['refresh_token'],
+        })
+        self.account_peppol_proxy_state = response['peppol_state']
+        self.sudo().account_peppol_migration_key = False
+        if not tools.config['test_enable'] and not modules.module.current_test:
+            self.env.cr.commit()  # the user creation is not idempotent, it now exists and is commited on IAP
+        return edi_user

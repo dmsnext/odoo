@@ -107,6 +107,16 @@ class SaleOrder(models.Model):
                     ('company_id', '=', order.company_id.id),
                 ], limit=1)
 
+    def _compute_pricelist_id(self):
+        # Override to compute pricelists for carts using the partner's GeoIP,
+        # providing a fallback in case they don't have an address set.
+        if not (country_code := self.env['website']._get_geoip_country_code()):
+            return super()._compute_pricelist_id()
+        if website_orders := self.filtered('website_id'):
+            website_orders = website_orders.with_context(country_code=country_code)
+            super(SaleOrder, website_orders)._compute_pricelist_id()
+        return super(SaleOrder, self - website_orders)._compute_pricelist_id()
+
     def _search_abandoned_cart(self, operator, value):
         website_ids = self.env['website'].search_read(fields=['id', 'cart_abandoned_delay', 'partner_id'])
         deadlines = [[
@@ -430,7 +440,12 @@ class SaleOrder(models.Model):
         if not filtered_sol:
             return self.env['sale.order.line']
 
-        if product.product_tmpl_id._has_no_variant_attributes():
+        has_configurable_no_variant_attributes = any(
+            len(line.value_ids) > 1 or line.attribute_id.display_type == 'multi'
+            for line in product.attribute_line_ids
+            if line.attribute_id.create_variant == 'no_variant'
+        )
+        if has_configurable_no_variant_attributes:
             filtered_sol = filtered_sol.filtered(
                 lambda sol:
                     sol.product_no_variant_attribute_value_ids.ids == no_variant_attribute_value_ids
@@ -652,7 +667,8 @@ class SaleOrder(models.Model):
 
     def _remove_delivery_line(self):
         super()._remove_delivery_line()
-        self.pickup_location_data = {}  # Reset the pickup location data.
+        if not self.env.context.get("keep_pickup_location"):
+            self.pickup_location_data = {}  # Reset the pickup location data.
 
     def _get_preferred_delivery_method(self, available_delivery_methods):
         """ Get the preferred delivery method based on available delivery methods for the order.
@@ -732,12 +748,34 @@ class SaleOrder(models.Model):
             self.shop_warning = ''
         return warn
 
+    def _get_zero_priced_lines(self):
+        """ Return the cart lines priced at 0 while the website forbids the sale
+        of zero-priced products.
+
+        :rtype: sale.order.line
+        """
+        self.ensure_one()
+        if not self.website_id.prevent_zero_price_sale:
+            return self.env['sale.order.line']
+        allowed_types = set(self.env['product.template']._get_product_types_allow_zero_price())
+        return self.order_line.filtered(
+            lambda line:
+                line.product_id
+                and not line.display_type
+                and not line.is_delivery
+                # Combo products are priced through their combo item lines.
+                and line.product_template_id.type != 'combo'
+                and not line.combo_item_id
+                and line.price_unit == 0
+                and line.product_id.service_tracking not in allowed_types
+        )
+
     def _is_cart_ready(self):
         """ Whether the cart is valid and can be confirmed (and paid for)
 
         :rtype: bool
         """
-        return True
+        return bool(self.order_line) and not self._get_zero_priced_lines()
 
     def _check_cart_is_ready_to_be_paid(self):
         """ Whether the cart is valid and the user can proceed to the payment
@@ -749,8 +787,13 @@ class SaleOrder(models.Model):
                 "Your cart is not ready to be paid, please verify previous steps."
             ))
 
-        if not self.only_services and not self.carrier_id:
-            raise ValidationError(_("No shipping method is selected."))
+        if not self.only_services:
+            if not self.carrier_id:
+                raise ValidationError(_("No shipping method is selected."))
+            if self.carrier_id not in self._get_delivery_methods():
+                raise ValidationError(
+                    _("The delivery method is not compatible with your delivery address.")
+                )
 
     def _is_delivery_ready(self):
         return not self._has_deliverable_products() or self.carrier_id

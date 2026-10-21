@@ -116,6 +116,7 @@ class Job(models.Model):
               AND act.date_deadline <= %(today)s::date AND app.active
               AND app.job_id IN %(job_ids)s
               AND sta.hired_stage IS NOT TRUE
+              AND act.active
             GROUP BY app.job_id, act_state
         """, {
             'today': fields.Date.context_today(self),
@@ -152,7 +153,7 @@ class Job(models.Model):
         users_by_company = dict(
             self.env["res.users"]._read_group(
                 domain=domain,
-                groupby=["company_id"],
+                groupby=["company_ids"],
                 aggregates=["id:recordset"],
             ),
         )
@@ -371,6 +372,12 @@ class Job(models.Model):
     def _creation_subtype(self):
         return self.env.ref('hr_recruitment.mt_job_new')
 
+    def _get_attachments_domain(self):
+        return ['|',
+            '&', ('res_model', '=', 'hr.job'), ('res_id', 'in', self.ids),
+            '&', ('res_model', '=', 'hr.applicant'), ('res_id', 'in', self.application_ids.ids),
+        ]
+
     def action_open_attachments(self):
         return {
             'type': 'ir.actions.act_window',
@@ -386,10 +393,7 @@ class Job(models.Model):
                 (self.env.ref('hr_recruitment.ir_attachment_hr_recruitment_list_view').id, 'list')
             ],
             'search_view_id': self.env.ref('hr_recruitment.ir_attachment_view_search_inherit_hr_recruitment').ids,
-            'domain': ['|',
-                '&', ('res_model', '=', 'hr.job'), ('res_id', 'in', self.ids),
-                '&', ('res_model', '=', 'hr.applicant'), ('res_id', 'in', self.application_ids.ids),
-            ],
+            'domain': self._get_attachments_domain(),
         }
 
     def action_open_activities(self):

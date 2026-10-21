@@ -37,6 +37,9 @@ class SaleOrder(models.Model):
                 return expression.AND([res, [('program_id.website_id', 'in', (self.website_id.id, False))]])
         return res
 
+    def _get_program_timezone(self):
+        return self.website_id.salesperson_id.tz or super()._get_program_timezone()
+
     def _try_pending_coupon(self):
         if not request:
             return False
@@ -250,3 +253,7 @@ class SaleOrder(models.Model):
         lines = super()._cart_find_product_line(product_id, line_id, **kwargs)
         lines = lines.filtered(lambda l: not l.is_reward_line) if not line_id else lines
         return lines
+
+    def _get_zero_priced_lines(self):
+        """Exclude reward lines from the prevented zero-priced rule."""
+        return super()._get_zero_priced_lines().filtered(lambda line: not line.is_reward_line)

@@ -166,16 +166,25 @@ test("Can spin an icon", async () => {
 });
 
 test("Can set icon color", async () => {
-    const { el } = await setupEditor(`<p><span class="fa fa-glass">[]</span></p>`);
+    const { el } = await setupEditor('<p><span class="fa fa-glass"></span></p>');
+    expect(getContent(el)).toBe(
+        `<p>\ufeff<span class="fa fa-glass" contenteditable="false">\u200b</span>\ufeff</p>`
+    );
+    const fa = el.querySelector(".fa");
+    setSelection({ anchorNode: fa, anchorOffset: 0, focusNode: fa, focusOffset: 0 });
+    await tick();
+    await animationFrame();
+    expect(getContent(el)).toBe(
+        `<p>\ufeff[<span class="fa fa-glass" contenteditable="false">\u200b</span>]\ufeff</p>`
+    );
     await waitFor(".o-we-toolbar");
     expect(".o_font_color_selector").toHaveCount(0);
     await click(".o-select-color-foreground");
     await animationFrame();
-    expect(".o_font_color_selector").toHaveCount(1);
-    await click(".o_color_button[data-color='#6BADDE']");
-    await animationFrame();
-    await expectElementCount(".o-we-toolbar", 1);
-    expect(".o_font_color_selector").toHaveCount(0); // selector closed
+    const colorButton = await waitFor(".o_color_button[data-color='#6BADDE']");
+    colorButton.click();
+    await expectElementCount(".o_font_color_selector", 0); // selector closed
+    await waitFor(".o-we-toolbar .o-select-color-foreground [style*='#6badde']");
     expect(getContent(el)).toBe(
         `<p>[<font style="color: rgb(107, 173, 222);">\ufeff<span class="fa fa-glass" contenteditable="false">\u200b</span>\ufeff</font>]</p>`
     );
@@ -231,11 +240,11 @@ test("Should be able to undo after adding spin effect to an icon", async () => {
     await click("button[name='icon_spin']");
     await animationFrame();
     expect("span.fa-glass.fa-spin").toHaveCount(1);
-    expect(".btn-group[name='icon_spin'] button").toHaveClass("active");
+    await expectElementCount(".btn-group[name='icon_spin'] button.active", 1);
     undo(editor);
     await animationFrame();
     expect("span.fa-glass.fa-spin").toHaveCount(0);
-    expect(".btn-group[name='icon_spin']").not.toHaveClass("active");
+    await expectElementCount(".btn-group[name='icon_spin'].active", 0);
     expect("span.fa-glass").toHaveCount(1);
     expect("span.fa-glass.fa-spin").toHaveCount(0);
 });

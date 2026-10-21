@@ -3,13 +3,14 @@
 # * hr_skills
 #
 # Oakarmin Iron <oakarminiron@gmail.com>, 2025.
+# Weblate <noreply-mt-weblate@weblate.org>, 2025, 2026.
 msgid ""
 msgstr ""
 "Project-Id-Version: Odoo Server 18.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-09-25 08:39+0000\n"
-"PO-Revision-Date: 2025-09-10 13:57+0000\n"
-"Last-Translator: Oakarmin Iron <oakarminiron@gmail.com>\n"
+"POT-Creation-Date: 2026-04-10 18:37+0000\n"
+"PO-Revision-Date: 2026-03-30 06:24+0000\n"
+"Last-Translator: Weblate <noreply-mt-weblate@weblate.org>\n"
 "Language-Team: Burmese <https://translate.odoo.com/projects/odoo-18/"
 "hr_skills/my/>\n"
 "Language: my\n"
@@ -17,7 +18,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: \n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Weblate 5.12.2\n"
+"X-Generator: Weblate 5.16.2\n"
 
 #. module: hr_skills
 #. odoo-python
@@ -31,21 +32,6 @@ msgid "'CV - %s' % (object.name)"
 msgstr ""
 
 #. module: hr_skills
-#: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_sidepanel
-msgid "+1234567890"
-msgstr ""
-
-#. module: hr_skills
-#: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_main_panel
-msgid "2022"
-msgstr ""
-
-#. module: hr_skills
-#: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_main_panel
-msgid "2023"
-msgstr ""
-
-#. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_line_admin_7
 msgid "A 2D/3D map generator for incremental games."
 msgstr ""
@@ -55,13 +41,13 @@ msgstr ""
 #: code:addons/hr_skills/static/src/fields/skills_one2many/skills_one2many.xml:0
 #: code:addons/hr_skills/static/src/xml/resume_templates.xml:0
 msgid "ADD"
-msgstr ""
+msgstr "ထည့်"
 
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_employee_skill_report__active
 #: model:ir.model.fields,field_description:hr_skills.field_hr_skill_type__active
 msgid "Active"
-msgstr ""
+msgstr "အက်တစ်"
 
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_adaptability
@@ -76,7 +62,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jog_allenkeller
 msgid "Allen-Keller"
-msgstr ""
+msgstr "အလန် ကဲလား"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_line_admin_5
@@ -104,7 +90,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_arabic
 msgid "Arabic"
-msgstr ""
+msgstr "အာရဗျစ်"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_stw_green_ltd
@@ -131,12 +117,12 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jve_arnoldcohen
 msgid "Arnold-Cohen"
-msgstr ""
+msgstr "အာနိုး ကိုဟန်"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_niv_arroyo_ltd
 msgid "Arroyo Ltd"
-msgstr ""
+msgstr "အာရိုယို Ltd"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_chs_avoca_primary_school
@@ -151,7 +137,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_bengali
 msgid "Bengali"
-msgstr ""
+msgstr "ဘင်ဂလီ"
 
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_big_data_technologies
@@ -181,6 +167,11 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_line_admin_3
 msgid "Burtho Inc."
+msgstr ""
+
+#. module: hr_skills
+#: model:hr.skill,name:hr_skills.hr_skill_csharp
+msgid "C#"
 msgstr ""
 
 #. module: hr_skills
@@ -264,13 +255,13 @@ msgstr "အရောင်"
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_employee_cv_wizard_view_form
 msgid "Colors"
-msgstr ""
+msgstr "အရောင်များ"
 
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_com
 #: model:hr.skill,name:hr_skills.hr_skill_communication
 msgid "Communication"
-msgstr "ဆက်သွယ်ပြောဆိုနိုင်စွမ်း"
+msgstr "ပြောဆိုဆက်သွယ်ရေး"
 
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_employee_skill_report__company_id
@@ -290,7 +281,7 @@ msgstr "အငြင်းပွားမှုဖြေရှင်းနို
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_employee_cv_wizard__show_contact
 msgid "Contact Information"
-msgstr ""
+msgstr "ဆက်သွယ်ရန် အချက်အလက်"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_stw_finley_rowe_and_adams
@@ -352,7 +343,7 @@ msgstr "ဝေဖန်ပိုင်းခြားစဉ်းစားနိ
 #. odoo-javascript
 #: code:addons/hr_skills/static/src/fields/resume_one2many/resume_one2many.xml:0
 msgid "Current"
-msgstr ""
+msgstr "လက်ရှိ"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_jep_davis_sanchez_and_miller
@@ -489,7 +480,7 @@ msgstr "ပြသသော အမည်"
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_resume_line__display_type
 msgid "Display Type"
-msgstr ""
+msgstr "ပြသသောပုံစံ"
 
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_django
@@ -504,12 +495,12 @@ msgstr ""
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.resume_line_view_form
 msgid "Duration"
-msgstr ""
+msgstr "ကြာချိန်"
 
 #. module: hr_skills
 #: model:hr.resume.line.type,name:hr_skills.resume_type_education
 msgid "Education"
-msgstr ""
+msgstr "ပညာရေး"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jve_ellinbank_primary_school
@@ -524,7 +515,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_email
 msgid "Email Marketing"
-msgstr ""
+msgstr "အီးမေးလ် မားကက်တင်း"
 
 #. module: hr_skills
 #: model:ir.model,name:hr_skills.model_hr_employee
@@ -547,12 +538,12 @@ msgstr "ဝန်ထမ်း အမည်"
 #: model:ir.actions.report,name:hr_skills.action_report_employee_cv
 #: model:ir.model,name:hr_skills.model_report_hr_skills_report_employee_cv
 msgid "Employee Resume"
-msgstr ""
+msgstr "ဝန်ထမ်း လျောက်လွှာ"
 
 #. module: hr_skills
 #: model:ir.actions.act_window,name:hr_skills.hr_employee_skill_report_action
 msgid "Employee Skills"
-msgstr ""
+msgstr "ဝန်ထမ်း၏ ကျွမ်းကျင်မှူများ"
 
 #. module: hr_skills
 #: model:ir.model,name:hr_skills.model_hr_employee_skill_report
@@ -603,7 +594,7 @@ msgstr ""
 #: model:hr.skill,name:hr_skills.hr_skill_english
 #: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_main_panel
 msgid "English"
-msgstr ""
+msgstr "အင်းဂလိပ်"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_line_admin_6
@@ -622,7 +613,7 @@ msgstr ""
 #: model:hr.resume.line.type,name:hr_skills.resume_type_experience
 #: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_main_panel
 msgid "Experience"
-msgstr ""
+msgstr "အတွေ့အကြုံ"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_jep_cole_ltd
@@ -632,7 +623,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_filipino
 msgid "Filipino"
-msgstr ""
+msgstr "ဖိလစ်ပီနို"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_line_admin_6
@@ -662,7 +653,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_french
 msgid "French"
-msgstr ""
+msgstr "ဖရန့်ရှ်"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jgo_galilee_catholic_school
@@ -697,7 +688,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_german
 msgid "German"
-msgstr ""
+msgstr "ဂျာမန်"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_lur_ramirez_inc
@@ -729,7 +720,7 @@ msgstr ""
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_employee_skill_log_view_search
 msgid "Group By"
-msgstr ""
+msgstr "အုပ်စုအလိုက်"
 
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_skill_view_search
@@ -774,7 +765,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_hindi
 msgid "Hindi"
-msgstr ""
+msgstr "ဟင်ဒီ"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_lur_holy_family_primary_school
@@ -817,7 +808,7 @@ msgstr "အိုင်ဒီ"
 #. module: hr_skills
 #: model:hr.skill.type,name:hr_skills.hr_skill_type_it
 msgid "IT"
-msgstr ""
+msgstr "အိုင်တီ"
 
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_it_governance_compliance
@@ -872,7 +863,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_indonesian
 msgid "Indonesian"
-msgstr ""
+msgstr "အင်ဒိုနီးရှန်း"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_niv_arroyo_ltd
@@ -892,7 +883,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_japanese
 msgid "Japanese"
-msgstr ""
+msgstr "ဂျပန်နီးစ်"
 
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_java
@@ -902,7 +893,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_javanese
 msgid "Javanese"
-msgstr ""
+msgstr "ဂျာဗာန်နီးစ်"
 
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_js
@@ -918,18 +909,23 @@ msgstr ""
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_line_admin_4
 msgid ""
 "Job position: Development team leader\n"
-"- Supported technical operations with investigating and correcting varied production support issues (Java, Perl, Shell scripts, SQL).\n"
-"- Led quality assurance planning for multiple concurrent projects relative to overall system architecture or trading system changes/new developments.\n"
-"- Configured and released business critical alpha and risk models using MATLAB and SQL with inputs from Portfolio Managers."
+"- Supported technical operations with investigating and correcting varied "
+"production support issues (Java, Perl, Shell scripts, SQL).\n"
+"- Led quality assurance planning for multiple concurrent projects relative "
+"to overall system architecture or trading system changes/new developments.\n"
+"- Configured and released business critical alpha and risk models using "
+"MATLAB and SQL with inputs from Portfolio Managers."
 msgstr ""
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_line_admin_3
 msgid ""
 "Job position: Product manager\n"
-"- Coordinated and managed software deployment across five system environments from development to production.\n"
+"- Coordinated and managed software deployment across five system "
+"environments from development to production.\n"
 "- Developed stored procedures to assist Java level programming efforts.\n"
-"- Developed multiple renewable energy plant architectures, both commercial installations and defense-related."
+"- Developed multiple renewable energy plant architectures, both commercial "
+"installations and defense-related."
 msgstr ""
 
 #. module: hr_skills
@@ -955,7 +951,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_korean
 msgid "Korean"
-msgstr ""
+msgstr "ကိုရီးယန်း"
 
 #. module: hr_skills
 #: model:hr.skill,name:hr_skills.hr_skill_kotlin
@@ -983,7 +979,7 @@ msgstr "ဘာသာစကားများ"
 #: model:ir.model.fields,field_description:hr_skills.field_hr_skill_level__write_uid
 #: model:ir.model.fields,field_description:hr_skills.field_hr_skill_type__write_uid
 msgid "Last Updated by"
-msgstr ""
+msgstr "နောက်ဆုံးပြင်ဆင်သူ"
 
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_employee_cv_wizard__write_date
@@ -995,7 +991,7 @@ msgstr ""
 #: model:ir.model.fields,field_description:hr_skills.field_hr_skill_level__write_date
 #: model:ir.model.fields,field_description:hr_skills.field_hr_skill_type__write_date
 msgid "Last Updated on"
-msgstr ""
+msgstr "နောက်ဆုံးပြင်ဆင်ချိန်"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jep_lawson_public_school
@@ -1026,7 +1022,7 @@ msgstr ""
 #: model:ir.model.fields,field_description:hr_skills.field_hr_skill_type__skill_level_ids
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_employee_skill_type_view_form
 msgid "Levels"
-msgstr ""
+msgstr "လယ်ဗယ်များ"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_fme_lewis_group
@@ -1061,7 +1057,7 @@ msgstr ""
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_company
 msgid "Logo"
-msgstr ""
+msgstr "လိုဂို"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_stw_lynchhodges
@@ -1101,12 +1097,12 @@ msgstr ""
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_sidepanel
 msgid "Marc Demo"
-msgstr ""
+msgstr "မာစ် ဒီမို"
 
 #. module: hr_skills
 #: model:hr.skill.type,name:hr_skills.hr_skill_type_marketing
 msgid "Marketing"
-msgstr ""
+msgstr "မားကက်တင်း"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jgo_martin_stanley_and_duncan
@@ -1117,7 +1113,8 @@ msgstr ""
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_line_admin_1
 msgid ""
 "Master in Electrical engineering\n"
-"            Master thesis: Better grid management and control through machine learning"
+"            Master thesis: Better grid management and control through "
+"machine learning"
 msgstr ""
 
 #. module: hr_skills
@@ -1292,12 +1289,12 @@ msgstr ""
 #. odoo-javascript
 #: code:addons/hr_skills/static/src/fields/skills_one2many/skills_one2many.xml:0
 msgid "Pick a skill from the list"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူ ရွေးရန်"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_mit_burns_lester_and_cuevas
 msgid "Police officer"
-msgstr ""
+msgstr "ရဲ အရာရှိ"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jog_port_curtis_road_state_school
@@ -1322,7 +1319,7 @@ msgstr ""
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_employee_cv_wizard_view_form
 msgid "Print"
-msgstr ""
+msgstr "ပရင့်"
 
 #. module: hr_skills
 #. odoo-python
@@ -1342,14 +1339,14 @@ msgstr "ပြဿနာဖြေရှင်းနိုင်စွမ်း"
 #. module: hr_skills
 #: model:hr.skill.type,name:hr_skills.hr_skill_type_dev
 msgid "Programming Languages"
-msgstr ""
+msgstr "ပရိုဂရမ်းမင်း ဘာသာစကားများ"
 
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_employee_skill__level_progress
 #: model:ir.model.fields,field_description:hr_skills.field_hr_employee_skill_log__level_progress
 #: model:ir.model.fields,field_description:hr_skills.field_hr_skill_level__level_progress
 msgid "Progress"
-msgstr ""
+msgstr "ပြီးမြှောက်မှူ"
 
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.employee_skill_level_view_form
@@ -1407,6 +1404,11 @@ msgstr ""
 #: model:hr.skill,name:hr_skills.hr_skill_python
 #: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_main_panel
 msgid "Python"
+msgstr ""
+
+#. module: hr_skills
+#: model:hr.skill,name:hr_skills.hr_skill_r
+msgid "R"
 msgstr ""
 
 #. module: hr_skills
@@ -1542,40 +1544,40 @@ msgstr ""
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_skill_view_search
 msgid "Search Skill"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူ ရှာရန်"
 
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_skill_type_view_search
 msgid "Search Skill Type"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူအမျိုးအစား ရှာရန်"
 
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_employee_cv_wizard__color_secondary
 msgid "Secondary Color"
-msgstr ""
+msgstr "ဒုတိယ အရောင်"
 
 #. module: hr_skills
 #: model_terms:hr.resume.line,description:hr_skills.employee_resume_chs_davis_plc
 msgid "Secretary, company"
-msgstr ""
+msgstr "စက္ကထရီ, ကုမ္ပဏီ"
 
 #. module: hr_skills
 #. odoo-javascript
 #: code:addons/hr_skills/static/src/fields/form_view_one2many/form_view_one2many.xml:0
 msgid "Select & Close"
-msgstr ""
+msgstr "သိမ်း & ပိတ်"
 
 #. module: hr_skills
 #. odoo-javascript
 #: code:addons/hr_skills/static/src/fields/form_view_one2many/form_view_one2many.xml:0
 msgid "Select & New"
-msgstr ""
+msgstr "သိမ်း & အသစ်ခေါ်"
 
 #. module: hr_skills
 #. odoo-javascript
 #: code:addons/hr_skills/static/src/fields/skills_one2many/skills_one2many.js:0
 msgid "Select Skills"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူ ရွေးရန်"
 
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_resume_line_type__sequence
@@ -1591,7 +1593,7 @@ msgstr ""
 #. module: hr_skills
 #: model:hr.resume.line.type,name:hr_skills.resume_type_side_projects
 msgid "Side Projects"
-msgstr ""
+msgstr "အပို ပရောဂျက်"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jth_simmonswilcox
@@ -1608,7 +1610,7 @@ msgstr ""
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_employee_skill_report_view_search
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_skill_view_search
 msgid "Skill"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူ"
 
 #. module: hr_skills
 #: model:ir.actions.act_window,name:hr_skills.action_hr_employee_skill_log_department
@@ -1624,13 +1626,13 @@ msgstr ""
 #: model:ir.model.fields,field_description:hr_skills.field_hr_employee_skill_report__skill_level
 #: model_terms:ir.ui.view,arch_db:hr_skills.employee_skill_level_view_form
 msgid "Skill Level"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူ အဆင့်"
 
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.employee_skill_level_view_tree
 #: model_terms:ir.ui.view,arch_db:hr_skills.employee_skill_view_tree
 msgid "Skill Levels"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူ အဆင့်များ"
 
 #. module: hr_skills
 #: model:ir.model,name:hr_skills.model_hr_skill_type
@@ -1644,7 +1646,7 @@ msgstr ""
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_employee_skill_type_view_form
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_skill_view_search
 msgid "Skill Type"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူအမျိုးအစား"
 
 #. module: hr_skills
 #: model:ir.actions.act_window,name:hr_skills.hr_skill_type_action
@@ -1684,13 +1686,13 @@ msgstr "ကျွမ်းကျင်မှူများ"
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_employee_skill_log_view_graph_employee
 #: model_terms:ir.ui.view,arch_db:hr_skills.hr_employee_skill_log_view_tree
 msgid "Skills History"
-msgstr ""
+msgstr "ကျွမ်းကျင်တတ်မြောက်မှူမှတ်တမ်း"
 
 #. module: hr_skills
 #. odoo-javascript
 #: code:addons/hr_skills/static/src/fields/skills_one2many/skills_one2many.js:0
 msgid "Skills Report"
-msgstr ""
+msgstr "ကျွမ်းကျင်မှူ တင်ပြချက်"
 
 #. module: hr_skills
 #: model:hr.resume.line.type,name:hr_skills.resume_type_social_media
@@ -1855,7 +1857,7 @@ msgstr ""
 #. module: hr_skills
 #: model_terms:ir.ui.view,arch_db:hr_skills.resume_line_view_form
 msgid "Title"
-msgstr "ခေါ်င်းစဉ်"
+msgstr "ခေါင်းစဉ်"
 
 #. module: hr_skills
 #: model:hr.resume.line,name:hr_skills.employee_resume_jgo_tottenham_central_school
@@ -1895,7 +1897,7 @@ msgstr ""
 #. module: hr_skills
 #: model:ir.model.fields,field_description:hr_skills.field_hr_resume_line__line_type_id
 msgid "Type"
-msgstr ""
+msgstr "အမျိုးအစား"
 
 #. module: hr_skills
 #: model:ir.model,name:hr_skills.model_hr_resume_line_type
@@ -2023,3 +2025,12 @@ msgstr ""
 #: model_terms:ir.ui.view,arch_db:hr_skills.report_employee_cv_sidepanel
 msgid "www.demo.com"
 msgstr ""
+
+#~ msgid "+1234567890"
+#~ msgstr "+၁၂၃၄၅၆၇၈၉၀"
+
+#~ msgid "2022"
+#~ msgstr "၂၀၂၂"
+
+#~ msgid "2023"
+#~ msgstr "၂၀၂၃"

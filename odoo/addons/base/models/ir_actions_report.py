@@ -5,12 +5,13 @@ from contextlib import ExitStack
 from markupsafe import Markup
 from urllib.parse import urlparse
 
-from odoo import api, fields, models, tools, SUPERUSER_ID, _
-from odoo.exceptions import UserError, AccessError, RedirectWarning
+from odoo import api, fields, models, modules, tools, _
+from odoo.exceptions import UserError, AccessError, RedirectWarning, ValidationError
 from odoo.service import security
 from odoo.tools.safe_eval import safe_eval, time
 from odoo.tools.misc import find_in_path
-from odoo.tools import check_barcode_encoding, config, is_html_empty, parse_version, split_every
+from odoo.tools.lru import LRU
+from odoo.tools import check_barcode_encoding, config, frozendict, is_html_empty, parse_version, split_every
 from odoo.http import request, root
 from odoo.tools.pdf import PdfFileWriter, PdfFileReader, PdfReadError
 from odoo.osv.expression import NEGATIVE_TERM_OPERATORS, FALSE_DOMAIN
@@ -251,7 +252,7 @@ class IrActionsReport(models.Model):
         attachment_name = safe_eval(self.attachment, {'object': record, 'time': time}) if self.attachment else ''
         if not attachment_name:
             return None
-        return self.env['ir.attachment'].search([
+        return record.env['ir.attachment'].search([
                 ('name', '=', attachment_name),
                 ('res_model', '=', self.model),
                 ('res_id', '=', record.id)
@@ -317,7 +318,7 @@ class IrActionsReport(models.Model):
                 command_args.extend(['--page-width', str(paperformat_id.page_width) + 'mm'])
                 command_args.extend(['--page-height', str(paperformat_id.page_height) + 'mm'])
 
-            if specific_paperformat_args and specific_paperformat_args.get('data-report-margin-top'):
+            if specific_paperformat_args and 'data-report-margin-top' in specific_paperformat_args:
                 command_args.extend(['--margin-top', str(specific_paperformat_args['data-report-margin-top'])])
             else:
                 command_args.extend(['--margin-top', str(paperformat_id.margin_top)])
@@ -336,14 +337,14 @@ class IrActionsReport(models.Model):
                 if wkhtmltopdf_dpi_zoom_ratio:
                     command_args.extend(['--zoom', str(96.0 / dpi)])
 
-            if specific_paperformat_args and specific_paperformat_args.get('data-report-header-spacing'):
+            if specific_paperformat_args and 'data-report-header-spacing' in specific_paperformat_args:
                 command_args.extend(['--header-spacing', str(specific_paperformat_args['data-report-header-spacing'])])
             elif paperformat_id.header_spacing:
                 command_args.extend(['--header-spacing', str(paperformat_id.header_spacing)])
 
             command_args.extend(['--margin-left', str(paperformat_id.margin_left)])
 
-            if specific_paperformat_args and specific_paperformat_args.get('data-report-margin-bottom'):
+            if specific_paperformat_args and 'data-report-margin-bottom' in specific_paperformat_args:
                 command_args.extend(['--margin-bottom', str(specific_paperformat_args['data-report-margin-bottom'])])
             else:
                 command_args.extend(['--margin-bottom', str(paperformat_id.margin_bottom)])
@@ -462,7 +463,7 @@ class IrActionsReport(models.Model):
         :param image_format union['jpg', 'png']: format of the image
         :return list[bytes|None]:
         """
-        if (tools.config['test_enable'] or tools.config['test_file']) and not self.env.context.get('force_image_rendering'):
+        if modules.module.current_test:
             return [None] * len(bodies)
         if not wkhtmltoimage_version or wkhtmltoimage_version < parse_version('0.12.0'):
             raise UserError(_('wkhtmltoimage 0.12.0^ is required in order to render images from html'))
@@ -718,17 +719,19 @@ class IrActionsReport(models.Model):
             barcode_type = 'Code128'
 
         try:
-            barcode = createBarcodeDrawing(barcode_type, value=value, format='png', **kwargs)
-
-            # If a mask is asked and it is available, call its function to
-            # post-process the generated QR-code image
+            mask_to_apply = None
             if kwargs['mask']:
                 available_masks = self.get_available_barcode_masks()
                 mask_to_apply = available_masks.get(kwargs['mask'])
+            frozen_kwargs = frozendict(kwargs)
+            cache = self.env.cr.cache.setdefault('ir_actions_report_barcode', LRU(256))
+            cache_key = (barcode_type, value, frozen_kwargs, mask_to_apply)
+            if cache_key not in cache:
+                barcode = createBarcodeDrawing(barcode_type, value=value, format='png', **frozen_kwargs)
                 if mask_to_apply:
-                    mask_to_apply(kwargs['width'], kwargs['height'], barcode)
-
-            return barcode.asString('png')
+                    mask_to_apply(frozen_kwargs['width'], frozen_kwargs['height'], barcode)
+                cache[cache_key] = barcode.asString('png')
+            return cache[cache_key]
         except (ValueError, AttributeError):
             if barcode_type == 'Code128':
                 raise ValueError("Cannot convert into barcode.")
@@ -776,17 +779,23 @@ class IrActionsReport(models.Model):
         raise UserError(_("Odoo is unable to merge the generated PDFs."))
 
     @api.model
-    def _merge_pdfs(self, streams, handle_error=_handle_merge_pdfs_error):
+    def _merge_pdfs(self, streams, handle_error=None):
         writer = PdfFileWriter()
         for stream in streams:
             try:
                 reader = PdfFileReader(stream)
                 writer.appendPagesFromReader(reader)
             except (PdfReadError, TypeError, NotImplementedError, ValueError) as e:
-                handle_error(error=e, error_stream=stream)
+                if handle_error is None:
+                    self._handle_merge_pdfs_error(error=e, error_stream=stream)
+                else:
+                    handle_error(error=e, error_stream=stream)
         result_stream = io.BytesIO()
         streams.append(result_stream)
-        writer.write(result_stream)
+        try:
+            writer.write(result_stream)
+        except PdfReadError:
+            raise UserError(_("Odoo is unable to merge the generated PDFs."))
         return result_stream
 
     def _render_qweb_pdf_prepare_streams(self, report_ref, data, res_ids=None):
@@ -947,11 +956,11 @@ class IrActionsReport(models.Model):
                         stream = io.BytesIO()
                         attachment_writer.write(stream)
                         collected_streams[res_ids_wo_stream[i]]['stream'] = stream
-                    return collected_streams
                 else:
                     for res_id in res_ids_wo_stream:
                         individual_collected_stream = self._render_qweb_pdf_prepare_streams(report_ref=report_ref, data=data, res_ids=[res_id])
                         collected_streams[res_id]['stream'] = individual_collected_stream[res_id]['stream']
+                return collected_streams
             collected_streams[False] = {'stream': pdf_content_stream, 'attachment': None}
 
         return collected_streams
@@ -1186,28 +1195,10 @@ class IrActionsReport(models.Model):
 
     @api.model
     def _prepare_local_attachments(self, attachments):
-        attachments_with_data = self.env['ir.attachment']
         for attachment in attachments:
-            if not attachment._is_remote_source():
-                attachments_with_data |= attachment
-            elif (stream := attachment._to_http_stream()) and stream.url:
-                # call `_to_http_stream()` in case the attachment is an url or cloud storage attachment
+            if attachment._is_remote_source():
                 try:
-                    response = requests.get(stream.url, timeout=10)
-                    response.raise_for_status()
-                    attachment_data = response.content
-                    if not attachment_data:
-                        _logger.warning("Attachment %s at with URL %s retrieved successfully, but no content was found.", attachment.id, attachment.url)
-                        continue
-                    attachments_with_data |= self.env['ir.attachment'].new({
-                        'db_datas': attachment_data,
-                        'name': attachment.name,
-                        'mimetype': attachment.mimetype,
-                        'res_model': attachment.res_model,
-                        'res_id': attachment.res_id
-                    })
-                except requests.exceptions.RequestException as e:
-                    _logger.error("Request for attachment %s with URL %s failed: %s", attachment.id, attachment.url, e)
-            else:
-                _logger.error("Unexpected edge case: Is not being considered as a local or remote attachment, attachment ID:%s will be skipped.", attachment.id)
-        return attachments_with_data
+                    attachment._migrate_remote_to_local()
+                except (ValidationError, requests.exceptions.RequestException) as e:
+                    _logger.error("Failed to migrate attachment %s to local: %s", attachment.id, e)
+        return attachments.filtered(lambda a: not a._is_remote_source())

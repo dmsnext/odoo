@@ -1,24 +1,27 @@
 # Translation of Odoo Server.
 # This file contains the translation of the following modules:
-# 	* fleet
-# 
+# * fleet
+#
 # Translators:
 # zakariya moradi, 2025
 # Tiffany Chang, 2025
-# 
+#
+# Weblate <noreply-mt-weblate@weblate.org>, 2026.
 msgid ""
 msgstr ""
 "Project-Id-Version: Odoo Server 18.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-07-11 18:38+0000\n"
-"PO-Revision-Date: 2024-09-25 09:41+0000\n"
-"Last-Translator: Tiffany Chang, 2025\n"
-"Language-Team: Persian (https://app.transifex.com/odoo/teams/41243/fa/)\n"
+"POT-Creation-Date: 2025-12-29 18:37+0000\n"
+"PO-Revision-Date: 2026-09-02 16:07+0000\n"
+"Last-Translator: Weblate <noreply-mt-weblate@weblate.org>\n"
+"Language-Team: Persian <https://translate.odoo.com/projects/odoo-18/fleet/"
+"fa/>\n"
+"Language: fa\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: \n"
-"Language: fa\n"
-"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"Plural-Forms: nplurals=2; plural=n > 1;\n"
+"X-Generator: Weblate 2026.8.1\n"
 
 #. module: fleet
 #: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_view_kanban
@@ -31,6 +34,8 @@ msgid ""
 "<span class=\"o_stat_value\">New</span>\n"
 "                                <span class=\"o_stat_text\">Vehicle</span>"
 msgstr ""
+"<span class=\"o_stat_value\">جدید</span>\n"
+"                                <span class=\"o_stat_text\">خودرو</span>"
 
 #. module: fleet
 #: model_terms:ir.ui.view,arch_db:fleet.res_config_settings_view_form
@@ -191,6 +196,7 @@ msgstr "بایگانی"
 #: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_log_services_view_form
 #: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_log_services_view_search
 #: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_model_brand_view_search
+#: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_model_view_search
 #: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_view_form
 #: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_view_search
 msgid "Archived"
@@ -426,11 +432,11 @@ msgstr "دسته بندی ها"
 #. module: fleet
 #: model_terms:ir.actions.act_window,help:fleet.fleet_vehicle_model_category_action
 msgid ""
-"Categories will help you manage your fleet more efficiently and arrange your"
-" vehicles."
+"Categories will help you manage your fleet more efficiently and arrange your "
+"vehicles."
 msgstr ""
-"دسته‌بندی‌ها به شما کمک می‌کنند تا ناوگان خود را به طور مؤثرتری مدیریت کرده "
-"و وسایل نقلیه‌تان را ساماندهی کنید."
+"دسته‌بندی‌ها به شما کمک می‌کنند تا ناوگان خود را به طور مؤثرتری مدیریت کرده و "
+"وسایل نقلیه‌تان را ساماندهی کنید."
 
 #. module: fleet
 #: model:ir.model.fields,field_description:fleet.field_fleet_service_type__category
@@ -473,8 +479,7 @@ msgstr "انتخاب کن آیا قرارداد هنوز معتبر است یا 
 
 #. module: fleet
 #: model:ir.model.fields,help:fleet.field_fleet_service_type__category
-msgid ""
-"Choose whether the service refer to contracts, vehicle services or both"
+msgid "Choose whether the service refer to contracts, vehicle services or both"
 msgstr "انتخاب کن آیا سرویس به قراردادها، سرویسهای خودرو یا هر دو اشاره دارند"
 
 #. module: fleet
@@ -502,7 +507,7 @@ msgstr "رنگ کردن خودرو"
 #. module: fleet
 #: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_send_mail_view_form
 msgid "Communication about your vehicle."
-msgstr ""
+msgstr "پیام‌های مربوط به خودرو."
 
 #. module: fleet
 #: model:ir.model.fields,field_description:fleet.field_fleet_vehicle__company_id
@@ -754,8 +759,8 @@ msgstr "تاریخ وقتی که پوشش قرارداد آغاز می‌شود"
 #. module: fleet
 #: model:ir.model.fields,help:fleet.field_fleet_vehicle_log_contract__expiration_date
 msgid ""
-"Date when the coverage of the contract expirates (by default, one year after"
-" begin date)"
+"Date when the coverage of the contract expirates (by default, one year after "
+"begin date)"
 msgstr "تاریخ انقضای پوشش قرارداد (به طور پیش‌فرض، یک سال پس از تاریخ شروع)"
 
 #. module: fleet
@@ -958,8 +963,8 @@ msgid ""
 "Every service and contract of this vehicle will be considered as archived. "
 "Are you sure that you want to archive this record?"
 msgstr ""
-"هر خدمت و قرارداد این وسیله نقلیه به‌عنوان بایگانی شده در نظر گرفته خواهد "
-"شد. آیا مطمئن هستید که می‌خواهید این رکورد را بایگانی کنید؟"
+"هر خدمت و قرارداد این وسیله نقلیه به‌عنوان بایگانی شده در نظر گرفته خواهد شد. "
+"آیا مطمئن هستید که می‌خواهید این رکورد را بایگانی کنید؟"
 
 #. module: fleet
 #: model:fleet.service.type,name:fleet.type_service_21
@@ -1143,7 +1148,7 @@ msgstr "آیا دارای پیام است"
 #. module: fleet
 #: model:ir.model.fields,field_description:fleet.field_fleet_vehicle_log_contract__has_open_contract
 msgid "Has Open Contract"
-msgstr ""
+msgstr "دارای قرارداد باز است"
 
 #. module: fleet
 #: model:fleet.service.type,name:fleet.type_service_24
@@ -1438,7 +1443,7 @@ msgstr "قالب ایمیل"
 #. module: fleet
 #: model:ir.actions.server,name:fleet.action_fleet_vehicle_send_mail
 msgid "Mail to Driver"
-msgstr ""
+msgstr "پیام قابل تحویل"
 
 #. module: fleet
 #: model_terms:ir.actions.act_window,help:fleet.fleet_vehicle_log_contract_action
@@ -1448,7 +1453,8 @@ msgid ""
 "            you when some contracts have to be renewed."
 msgstr ""
 "تمام قراردادهای خود (اجاره، بیمه و غیره) را با\n"
-" خدمات و هزینه‌های مربوطه مدیریت کنید. اوdoo به‌طور خودکار به شما هشدار می‌دهد زمانی\n"
+" خدمات و هزینه‌های مربوطه مدیریت کنید. اوdoo به‌طور خودکار به شما هشدار می‌دهد "
+"زمانی\n"
 " که برخی از قراردادها نیاز به تمدید دارند."
 
 #. module: fleet
@@ -1785,12 +1791,12 @@ msgstr "عملیات پشتیبانی نمی‌شود."
 msgid ""
 "Optional translation language (ISO code) to select when sending out an "
 "email. If not set, the english version will be used. This should usually be "
-"a placeholder expression that provides the appropriate language, e.g. {{ "
-"object.partner_id.lang }}."
+"a placeholder expression that provides the appropriate language, e.g. "
+"{{ object.partner_id.lang }}."
 msgstr ""
 "زبان ترجمه اختیاری (کد ISO) برای انتخاب هنگام ارسال ایمیل. اگر تنظیم نشود، "
-"از نسخه انگلیسی استفاده خواهد شد. این معمولاً باید یک عبارت نگهدارنده باشد "
-"که زبان مناسب را ارائه می دهد، به عنوان مثال. {{ object.partner_id.lang }}."
+"از نسخه انگلیسی استفاده خواهد شد. این معمولاً باید یک عبارت نگهدارنده باشد که "
+"زبان مناسب را ارائه می دهد، به عنوان مثال. {{ object.partner_id.lang }}."
 
 #. module: fleet
 #: model:fleet.service.type,name:fleet.type_service_service_15
@@ -1873,7 +1879,7 @@ msgstr "تعویض پمپ فرمان برقی"
 #: model:ir.model.fields,field_description:fleet.field_fleet_vehicle__power_unit
 #: model:ir.model.fields,field_description:fleet.field_fleet_vehicle_model__power_unit
 msgid "Power Unit"
-msgstr ""
+msgstr "واحد قدرت"
 
 #. module: fleet
 #: model:ir.model.fields,help:fleet.field_fleet_vehicle__power
@@ -2056,7 +2062,7 @@ msgstr "ارسال ایمیل"
 #. module: fleet
 #: model:ir.model,name:fleet.model_fleet_vehicle_send_mail
 msgid "Send mails to Drivers"
-msgstr ""
+msgstr "ارسال پیام به رانندگان"
 
 #. module: fleet
 #: model:fleet.vehicle.tag,name:fleet.vehicle_tag_senior
@@ -2259,13 +2265,13 @@ msgstr ""
 #. odoo-python
 #: code:addons/fleet/wizard/fleet_vehicle_send_mail.py:0
 msgid "The following vehicle drivers are missing an email address: %s."
-msgstr ""
+msgstr "این رانندگان خودرو آدرس ایمیل ندارند: %s."
 
 #. module: fleet
 #. odoo-python
 #: code:addons/fleet/models/fleet_vehicle.py:0
 msgid "The odometer value cannot be lower than the previous one."
-msgstr ""
+msgstr "مقدار کیلومترشمار نمی‌تواند کمتر از مقدار قبلی باشد."
 
 #. module: fleet
 #: model:fleet.service.type,name:fleet.type_service_43
@@ -2331,7 +2337,8 @@ msgstr "کمک مسافرتی"
 #: model_terms:ir.actions.act_window,help:fleet.fleet_vehicle_log_services_action
 msgid ""
 "Track all the services done on your vehicle.\n"
-"            Services can be of many types: occasional repair, fixed maintenance, etc."
+"            Services can be of many types: occasional repair, fixed "
+"maintenance, etc."
 msgstr ""
 "تمام خدمات انجام شده بر روی خودروی خود را پیگیری کنید.\n"
 " خدمات می‌توانند انواع مختلفی داشته باشند: تعمیرات موردی، نگهداری ثابت و غیره."
@@ -2481,7 +2488,7 @@ msgstr "نوع خودرو"
 #. odoo-python
 #: code:addons/fleet/wizard/fleet_vehicle_send_mail.py:0
 msgid "Vehicle: Mass mail drivers"
-msgstr ""
+msgstr "خودرو: پیام انبوه به رانندگان"
 
 #. module: fleet
 #. odoo-python
@@ -2627,8 +2634,7 @@ msgstr ""
 #: model_terms:ir.actions.act_window,help:fleet.fleet_vehicle_model_action
 msgid "You can define several models (e.g. A3, A4) for each make (Audi)."
 msgstr ""
-"شما می‌توانید چندین مدل (مانند A3، A4) را برای هر برند (مثل Audi) تعریف "
-"کنید."
+"شما می‌توانید چندین مدل (مانند A3، A4) را برای هر برند (مثل Audi) تعریف کنید."
 
 #. module: fleet
 #: model_terms:ir.ui.view,arch_db:fleet.fleet_vehicle_model_view_form

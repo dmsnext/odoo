@@ -100,10 +100,9 @@
                     <FacturasRectificadasSustituidas>
                         <IDFacturaRectificadaSustituida>
                             <!-- NOTE: could support issuing a single credit note for multiple invoices (optional) -->
-                            <t t-set="seq_and_num" t-value="refunded_doc._get_tbai_sequence_and_number()"/>
-                            <SerieFactura t-out="seq_and_num[0]"/>
-                            <NumFactura t-out="seq_and_num[1]"/>
-                            <FechaExpedicionFactura t-out="format_date(refunded_doc.xml_attachment_id and refunded_doc._get_tbai_signature_and_date()[1] or refunded_doc_invoice_date)"/>
+                            <SerieFactura t-out="refunded_serie"/>
+                            <NumFactura t-out="refunded_num"/>
+                            <FechaExpedicionFactura t-out="format_date(refunded_date)"/>
                         </IDFacturaRectificadaSustituida>
                     </FacturasRectificadasSustituidas>
                 </t>
@@ -178,6 +177,8 @@
                         <DesgloseIVA>
                             <DetalleIVA t-foreach="desglose['S2']" t-as="detalle">
                                 <BaseImponible t-out="format_float(detalle['BaseImponible'])"/>
+                                <TipoImpositivo t-out="format_float(detalle['TipoImpositivo'])"/>
+                                <CuotaImpuesto t-out="format_float(detalle['CuotaRepercutida'])"/>
                             </DetalleIVA>
                         </DesgloseIVA>
                     </DetalleNoExenta>
@@ -191,8 +192,8 @@
                         'OT' if 'the' ClaveRegimenIvaOpTrascendencia == 10
                         'RL' if 'some' ClaveRegimenIvaOpTrascendencia == 08
                     BUT those are not supported yet-->
-                    <Importe t-out="no_sujeta.get('ImportePorArticulos7_14_Otros')"/>
-                    <Importe t-out="no_sujeta.get('ImporteTAIReglasLocalizacion')"/>
+                    <Importe t-if="'ImportePorArticulos7_14_Otros' in no_sujeta" t-out="format_float(no_sujeta['ImportePorArticulos7_14_Otros'])"/>
+                    <Importe t-if="'ImporteTAIReglasLocalizacion' in no_sujeta" t-out="format_float(no_sujeta['ImporteTAIReglasLocalizacion'])"/>
                 </DetalleNoSujeta>
             </NoSujeta>
         </template>

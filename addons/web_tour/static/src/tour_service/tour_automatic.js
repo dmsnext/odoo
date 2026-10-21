@@ -1,10 +1,11 @@
-import { tourState } from "./tour_state";
-import { config as transitionConfig } from "@web/core/transition";
-import { TourStepAutomatic } from "./tour_step_automatic";
-import { Macro } from "@web/core/macro";
-import { browser } from "@web/core/browser/browser";
-import { enableEventLogs, setupEventActions } from "@web/../lib/hoot-dom/helpers/events";
 import * as hootDom from "@odoo/hoot-dom";
+import { _enableEventLogs, _setupEventActions } from "@web/../lib/hoot-dom/helpers/events";
+import { _setDefaultWaitTimeout } from "@web/../lib/hoot-dom/helpers/time";
+import { browser } from "@web/core/browser/browser";
+import { Macro } from "@web/core/macro";
+import { config as transitionConfig } from "@web/core/transition";
+import { tourState } from "./tour_state";
+import { TourStepAutomatic } from "./tour_step_automatic";
 
 export class TourAutomatic {
     mode = "auto";
@@ -28,8 +29,9 @@ export class TourAutomatic {
     }
 
     start() {
-        setupEventActions(document.createElement("div"), { allowSubmit: true });
-        enableEventLogs(this.debugMode);
+        _setupEventActions(document.createElement("div"), { allowSubmit: true });
+        _setDefaultWaitTimeout(10_000);
+        _enableEventLogs(this.debugMode);
         const { delayToCheckUndeterminisms, stepDelay } = this.config;
         const macroSteps = this.steps
             .filter((step) => step.index >= this.currentIndex)
@@ -68,7 +70,7 @@ export class TourAutomatic {
                             this.allowUnload = true;
                             setTimeout(() => {
                                 const message = `
-                                    The key { expectUnloadPage } is defined but page has not been unloaded within 20000 ms. 
+                                    The key { expectUnloadPage } is defined but page has not been unloaded within 20000 ms.
                                     You probably don't need it.
                                 `.replace(/^\s+/gm, "");
                                 this.throwError(message);

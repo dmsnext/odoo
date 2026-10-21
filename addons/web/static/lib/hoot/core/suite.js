@@ -37,13 +37,22 @@ const SHARED_CURRENT_JOBS = $freeze([]);
 
 /**
  * @param {Pick<Suite, "name" | "parent">} suite
- * @param {...string} message
+ * @param {...(Error | string)} message
  * @returns {HootError}
  */
 export function suiteError({ name, parent }, ...message) {
     const parentString = parent ? ` (in parent suite ${stringify(parent.name)})` : "";
+    const errorOptions = { level: "critical" };
+    if (message[0] instanceof Error) {
+        const error = message.shift();
+        errorOptions.cause = error;
+        if (error.message) {
+            message.unshift(error.message);
+        }
+    }
     return new HootError(
-        `error while registering suite ${stringify(name)}${parentString}: ${message.join("\n")}`
+        `error while registering suite ${stringify(name)}${parentString}: ${message.join("\n")}`,
+        errorOptions
     );
 }
 

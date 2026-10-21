@@ -101,7 +101,7 @@ class StockQuant(models.Model):
     inventory_quantity_auto_apply = fields.Float(
         'Inventoried Quantity', digits='Product Unit of Measure',
         compute='_compute_inventory_quantity_auto_apply',
-        inverse='_set_inventory_quantity', groups='stock.group_stock_manager'
+        inverse='_set_inventory_quantity', groups='stock.group_stock_user'
     )
     inventory_diff_quantity = fields.Float(
         'Difference', compute='_compute_inventory_diff_quantity', store=True,
@@ -589,6 +589,9 @@ class StockQuant(models.Model):
     def _compute_display_name(self):
         """name that will be displayed in the detailed operation"""
         for record in self:
+            if not record.ids:
+                record.display_name = ''
+                continue
             name = [record.location_id.display_name]
             if record.lot_id:
                 name.append(record.lot_id.name)
@@ -698,7 +701,7 @@ class StockQuant(models.Model):
                 if pkg[0] is None:
                     # Lazily retrieve ids for single items
                     if not single_item_ids:
-                        single_item_ids = self.search(expression.AND([[('package_id', '=', None)], domain])).mapped('id')
+                        single_item_ids = self.search(expression.AND([[('package_id', '=', None)], domain])).filtered(lambda quant: quant.quantity > quant.reserved_quantity).mapped('id')
                     selected_single_items.append(single_item_ids.pop())
 
             expr = [('package_id', 'in', [elem[0] for elem in node.taken_packages if elem[0] is not None])]
@@ -867,7 +870,7 @@ class StockQuant(models.Model):
 
         # do full packaging reservation when it's needed
         if product_packaging_id and product_id.product_tmpl_id.categ_id.packaging_reserve_method == "full":
-            available_quantity = product_packaging_id._check_qty(available_quantity, product_id.uom_id, "DOWN")
+            available_quantity = product_packaging_id._check_qty(min(quantity, available_quantity), product_id.uom_id, "DOWN")
 
         quantity = min(quantity, available_quantity)
 
@@ -1053,8 +1056,12 @@ class StockQuant(models.Model):
             raise ValidationError(_('Quantity or Reserved Quantity should be set.'))
         self = self.sudo()
         quants = self._gather(product_id, location_id, lot_id=lot_id, package_id=package_id, owner_id=owner_id, strict=True)
-        if lot_id and quantity > 0:
-            quants = quants.filtered(lambda q: q.lot_id)
+        if lot_id:
+            if float_compare(quantity, 0, precision_rounding=product_id.uom_id.rounding) > 0:
+                quants = quants.filtered(lambda q: q.lot_id)
+            else:
+                # Don't remove quantity from a negative quant without lot
+                quants = quants.filtered(lambda q: float_compare(q.quantity, 0, precision_rounding=q.product_uom_id.rounding) > 0 or q.lot_id)
 
         if location_id.should_bypass_reservation():
             incoming_dates = []
@@ -1318,6 +1325,13 @@ class StockQuant(models.Model):
         if not self.env['ir.config_parameter'].sudo().get_param('stock.skip_quant_tasks'):
             self._quant_tasks()
         ctx = dict(self.env.context or {})
+        if not domain:
+            domain = []
+        domain += [
+            '|',
+            ('product_id.company_id', 'parent_of', ctx.get('allowed_company_ids', [])),
+            ('product_id.company_id', '=', False)
+        ]
         ctx['inventory_report_mode'] = True
         ctx.pop('group_by', None)
         action = {
@@ -1326,7 +1340,7 @@ class StockQuant(models.Model):
             'res_model': 'stock.quant',
             'type': 'ir.actions.act_window',
             'context': ctx,
-            'domain': domain or [],
+            'domain': domain,
             'help': """
                 <p class="o_view_nocontent_empty_folder">{}</p>
                 <p>{}</p>
@@ -1339,7 +1353,7 @@ class StockQuant(models.Model):
             action['id'] = target_action.id
 
         form_view = self.env.ref('stock.view_stock_quant_form_editable').id
-        if self.env.context.get('inventory_mode') and self.env.user.has_group('stock.group_stock_manager'):
+        if self.env.context.get('inventory_mode') and self.env.user.has_group('stock.group_stock_user'):
             action['view_id'] = self.env.ref('stock.view_stock_quant_tree_editable').id
         else:
             action['view_id'] = self.env.ref('stock.view_stock_quant_tree').id
@@ -1647,10 +1661,13 @@ class QuantPackage(models.Model):
         return super().write(vals)
 
     def unpack(self):
+        if not self.quant_ids:
+            return
+        quants = self.quant_ids
         self.quant_ids.move_quants(message=_("Quantities unpacked"), unpack=True)
         # Quant clean-up, mostly to avoid multiple quants of the same product. For example, unpack
         # 2 packages of 50, then reserve 100 => a quant of -50 is created at transfer validation.
-        self.quant_ids._quant_tasks()
+        quants._quant_tasks()
 
     def action_view_picking(self):
         action = self.env["ir.actions.actions"]._for_xml_id("stock.action_picking_tree_all")

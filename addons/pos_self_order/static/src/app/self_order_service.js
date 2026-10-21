@@ -23,6 +23,7 @@ import {
     getTaxesAfterFiscalPosition,
     getTaxesValues,
 } from "@point_of_sale/app/models/utils/tax_utils";
+import { initLNA } from "@point_of_sale/app/utils/init_lna";
 
 const { DateTime } = luxon;
 
@@ -55,7 +56,7 @@ export class SelfOrder extends Reactive {
         this.currency = this.config.currency_id;
 
         this.markupDescriptions();
-        this.access_token = this.config.access_token;
+        this.access_token = odoo.access_token;
         this.lastEditedProductId = null;
         this.currentProduct = 0;
         this.currentTable = null;
@@ -144,6 +145,12 @@ export class SelfOrder extends Reactive {
             this.addToCart(product, 1, "", {}, {});
             this.router.navigate("cart");
         });
+
+        if (this.config.self_ordering_mode === "kiosk") {
+            initLNA(this.notification);
+        } else {
+            odoo.use_lna = false;
+        }
     }
 
     computeAvailableCategories() {
@@ -508,7 +515,7 @@ export class SelfOrder extends Reactive {
                 order,
                 Object.values(printer.config.product_categories_ids)
             );
-            if (orderlines) {
+            if (orderlines.length > 0) {
                 const printingChanges = {
                     new: orderlines,
                     tracker: order.table_stand_number,
@@ -556,27 +563,25 @@ export class SelfOrder extends Reactive {
     }
 
     async initMobileData() {
-        if (this.config.self_ordering_mode !== "qr_code") {
-            if (
-                this.session &&
-                this.access_token &&
-                this.config.self_ordering_mode !== "consultation"
-            ) {
-                await this.getOrdersFromServer();
-                const tableIdentifier = this.router.getTableIdentifier();
+        if (
+            this.session &&
+            this.access_token &&
+            this.config.self_ordering_mode !== "consultation"
+        ) {
+            await this.getOrdersFromServer();
+            const tableIdentifier = this.router.getTableIdentifier();
 
-                if (tableIdentifier) {
-                    this.currentTable = this.models["restaurant.table"].find(
-                        (t) => t.identifier === tableIdentifier
-                    );
-                }
-
-                this.ordering = true;
+            if (tableIdentifier) {
+                this.currentTable = this.models["restaurant.table"].find(
+                    (t) => t.identifier === tableIdentifier
+                );
             }
 
-            if (!this.ordering) {
-                return;
-            }
+            this.ordering = true;
+        }
+
+        if (!this.ordering) {
+            return;
         }
     }
 
@@ -621,6 +626,12 @@ export class SelfOrder extends Reactive {
         }
     }
 
+    shouldUpdateLastOrderChange() {
+        // The kiosk sends its own orders to the preparation tools (see
+        // printKioskChanges), whereas a mobile order is still sent by the cashier.
+        return this.config.self_ordering_mode === "kiosk";
+    }
+
     async sendDraftOrderToServer(to_pay_on_kiosk = false) {
         if (
             Object.keys(this.currentOrder.changes).length === 0 ||
@@ -632,6 +643,9 @@ export class SelfOrder extends Reactive {
         try {
             const uuid = this.currentOrder.uuid;
             this.currentOrder.recomputeOrderData();
+            if (this.shouldUpdateLastOrderChange()) {
+                this.currentOrder.updateLastOrderChange();
+            }
             const data = await rpc(
                 `/pos-self-order/process-order-args/${this.config.self_ordering_mode}`,
                 {

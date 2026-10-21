@@ -1,7 +1,7 @@
 # Translation of Odoo Server.
 # This file contains the translation of the following modules:
-# 	* pos_restaurant
-# 
+# * pos_restaurant
+#
 # Translators:
 # yacov mosbacher <ymosba@gmail.com>, 2024
 # Lilach Gilliam <lilach.gilliam@gmail.com>, 2024
@@ -20,20 +20,37 @@
 # ExcaliberX <excaliberx@gmail.com>, 2024
 # ZVI BLONDER <ZVIBLONDER@gmail.com>, 2025
 # or balmas, 2025
-# 
+# or balmas <or@laylinetech.com>, 2025.
+# Weblate <noreply-mt-weblate@weblate.org>, 2026.
 msgid ""
 msgstr ""
 "Project-Id-Version: Odoo Server 18.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-12-16 13:39+0000\n"
-"PO-Revision-Date: 2024-09-25 09:41+0000\n"
-"Last-Translator: or balmas, 2025\n"
-"Language-Team: Hebrew (https://app.transifex.com/odoo/teams/41243/he/)\n"
+"POT-Creation-Date: 2026-07-03 17:38+0000\n"
+"PO-Revision-Date: 2026-06-24 08:24+0000\n"
+"Last-Translator: Weblate <noreply-mt-weblate@weblate.org>\n"
+"Language-Team: Hebrew <https://translate.odoo.com/projects/odoo-18/"
+"pos_restaurant/he/>\n"
+"Language: he\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: \n"
-"Language: he\n"
-"Plural-Forms: nplurals=3; plural=(n == 1 && n % 1 == 0) ? 0 : (n == 2 && n % 1 == 0) ? 1: 2;\n"
+"Plural-Forms: nplurals=3; plural=(n == 1) ? 0 : ((n == 2) ? 1 : 2);\n"
+"X-Generator: Weblate 2026.6.1\n"
+
+#. module: pos_restaurant
+#. odoo-javascript
+#: code:addons/pos_restaurant/static/src/app/tip_screen/tip_screen.js:0
+msgid ""
+"%(amount)s is more than 25% of the order's total amount. Are you sure of "
+"this tip amount?"
+msgstr ""
+
+#. module: pos_restaurant
+#. odoo-javascript
+#: code:addons/pos_restaurant/static/src/app/tip_screen/tip_screen.js:0
+msgid "%(original)s + %(tip)s tip = %(overall)s"
+msgstr ""
 
 #. module: pos_restaurant
 #. odoo-javascript
@@ -75,7 +92,8 @@ msgstr "<strong>קופה:</strong>"
 #. module: pos_restaurant
 #: model_terms:ir.actions.act_window,help:pos_restaurant.action_restaurant_floor_form
 msgid ""
-"A restaurant floor represents the place where customers are served, this is where you can\n"
+"A restaurant floor represents the place where customers are served, this is "
+"where you can\n"
 "                define and position the tables."
 msgstr ""
 "קומה במסעדה מייצגת את המקום בו לקוחות מקבלים שירות, ניתן\n"
@@ -201,6 +219,7 @@ msgstr "בארכיון"
 #. module: pos_restaurant
 #. odoo-javascript
 #: code:addons/pos_restaurant/static/src/app/floor_screen/floor_screen.js:0
+#: code:addons/pos_restaurant/static/src/app/tip_screen/tip_screen.js:0
 msgid "Are you sure?"
 msgstr "האם אתה בטוח?"
 
@@ -308,7 +327,7 @@ msgstr "כריך עוף קארי"
 #. odoo-javascript
 #: code:addons/pos_restaurant/static/src/app/floor_screen/floor_screen.xml:0
 msgid "Clone"
-msgstr ""
+msgstr "שכפול"
 
 #. module: pos_restaurant
 #. odoo-javascript
@@ -605,8 +624,8 @@ msgstr "תה קר"
 #. module: pos_restaurant
 #: model:ir.model.fields,help:pos_restaurant.field_restaurant_table__active
 msgid ""
-"If false, the table is deactivated and will not be available in the point of"
-" sale"
+"If false, the table is deactivated and will not be available in the point of "
+"sale"
 msgstr "אם מסומן 'לא נכון', השולחן לא פעיל ולא יהיה זמין בקופה"
 
 #. module: pos_restaurant
@@ -632,6 +651,18 @@ msgstr "עודכן לאחרונה על-ידי"
 #: model:ir.model.fields,field_description:pos_restaurant.field_restaurant_table__write_date
 msgid "Last Updated on"
 msgstr "עדכון אחרון ב"
+
+#. module: pos_restaurant
+#. odoo-javascript
+#: code:addons/pos_restaurant/static/src/app/floor_screen/floor_screen.js:0
+msgid "Link Table"
+msgstr ""
+
+#. module: pos_restaurant
+#. odoo-javascript
+#: code:addons/pos_restaurant/static/src/app/floor_screen/floor_screen.js:0
+msgid "Link Table %(sourceTable)s with %(destinationTable)s"
+msgstr ""
 
 #. module: pos_restaurant
 #. odoo-javascript
@@ -860,6 +891,15 @@ msgstr "פיצה צמחונית"
 #: code:addons/pos_restaurant/static/src/overrides/components/navbar/navbar.xml:0
 msgid "Plan"
 msgstr "תוכנית"
+
+#. module: pos_restaurant
+#. odoo-python
+#: code:addons/pos_restaurant/models/pos_restaurant.py:0
+msgid ""
+"Please close and validate the following open PoS Session before modifying "
+"this floor.\n"
+"Open session: %(config_name)s"
+msgstr ""
 
 #. module: pos_restaurant
 #: model:ir.model,name:pos_restaurant.model_pos_config
@@ -1257,8 +1297,7 @@ msgstr "השולחן ממנו הגיעה ההזמנה"
 
 #. module: pos_restaurant
 #: model:ir.model.fields,help:pos_restaurant.field_restaurant_table__color
-msgid ""
-"The table's color, expressed as a valid 'background' CSS property value"
+msgid "The table's color, expressed as a valid 'background' CSS property value"
 msgstr "צבע השולחן, מבוטא כערך מאפיין CSS 'רקע' תקף"
 
 #. module: pos_restaurant
@@ -1269,8 +1308,8 @@ msgstr "גובה השולחן בפיקסלים."
 #. module: pos_restaurant
 #: model:ir.model.fields,help:pos_restaurant.field_restaurant_table__position_h
 msgid ""
-"The table's horizontal position from the left side to the table's center, in"
-" pixels"
+"The table's horizontal position from the left side to the table's center, in "
+"pixels"
 msgstr "המיקום האופקי של השולחן מצד שמאל למרכז השולחן, בפיקסלים"
 
 #. module: pos_restaurant
@@ -1288,8 +1327,8 @@ msgstr "רוחב השולחן בפיקסלים."
 #: model:ir.model.fields,help:pos_restaurant.field_pos_config__takeaway_fp_id
 #: model:ir.model.fields,help:pos_restaurant.field_res_config_settings__pos_takeaway_fp_id
 msgid ""
-"This is useful for restaurants with onsite and take-away services that imply"
-" specific tax rates."
+"This is useful for restaurants with onsite and take-away services that imply "
+"specific tax rates."
 msgstr ""
 "זה שימושי למסעדות עם שירותים במקום ושירותי טייק אווי שיש להם שיעורי מס "
 "מסוימים."
@@ -1445,18 +1484,6 @@ msgstr "לא ניתן להסיר שולחן שנמצא בשימוש במשמרת
 
 #. module: pos_restaurant
 #. odoo-javascript
-#: code:addons/pos_restaurant/static/src/app/tip_receipt/tip_receipt.xml:0
-msgid "________________________"
-msgstr "________________________"
-
-#. module: pos_restaurant
-#. odoo-javascript
-#: code:addons/pos_restaurant/static/src/app/tip_receipt/tip_receipt.xml:0
-msgid "______________________________________________"
-msgstr "______________________________________________"
-
-#. module: pos_restaurant
-#. odoo-javascript
 #: code:addons/pos_restaurant/static/src/overrides/components/product_screen/product_screen.xml:0
 msgid "changes"
 msgstr "שינויים"
@@ -1472,3 +1499,9 @@ msgstr "פריטים"
 #: code:addons/pos_restaurant/static/src/overrides/components/order_widget/order_widget.js:0
 msgid "or book the table for later"
 msgstr "או הזמן את השולחן למועד מאוחר יותר"
+
+#~ msgid "________________________"
+#~ msgstr "________________________"
+
+#~ msgid "______________________________________________"
+#~ msgstr "______________________________________________"

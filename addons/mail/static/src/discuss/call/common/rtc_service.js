@@ -235,6 +235,15 @@ export class Rtc extends Record {
     cleanups = [];
     /** @type {number} */
     sfuTimeout;
+    /** @type {number} count of how many times the p2p service attempted a connection recovery */
+    _p2pRecoveryCount = 0;
+    upgradeConnectionDebounce = debounce(
+        () => {
+            this._upgradeConnection();
+        },
+        15000,
+        { leading: true, trailing: false }
+    );
 
     callActions = Record.attr([], {
         compute() {
@@ -728,7 +737,7 @@ export class Rtc extends Record {
                 }
                 for (const [id, info] of Object.entries(payload)) {
                     const session = await this.store.RtcSession.getWhenReady(Number(id));
-                    if (!session || !this.state.channel) {
+                    if (!this.state.channel || !session || session.eq(this.selfSession)) {
                         return;
                     }
                     // `isRaisingHand` is turned into the Date `raisingHand`
@@ -768,6 +777,22 @@ export class Rtc extends Record {
                     }, 2000);
                 }
                 return;
+            case "recovery": {
+                const { id } = payload;
+                const session = await this.store.RtcSession.getWhenReady(id);
+                if (
+                    !this.store.self.isInternalUser ||
+                    this.serverInfo ||
+                    this.state.fallbackMode ||
+                    !session?.channel.eq(this.state.channel)
+                ) {
+                    return;
+                }
+                this._p2pRecoveryCount++;
+                if (this._p2pRecoveryCount > 1 || !hasTurn(this.iceServers)) {
+                    this.upgradeConnectionDebounce();
+                }
+            }
         }
     }
 
@@ -811,6 +836,18 @@ export class Rtc extends Record {
                 }
                 return;
         }
+    }
+
+    async _upgradeConnection() {
+        const channelId = this.state.channel?.id;
+        if (this.serverInfo || this.state.fallbackMode || !channelId) {
+            return;
+        }
+        await rpc(
+            "/mail/rtc/channel/upgrade_connection",
+            { channel_id: channelId },
+            { silent: true }
+        );
     }
 
     async _downgradeConnection() {
@@ -1035,6 +1072,7 @@ export class Rtc extends Record {
         browser.clearTimeout(this.sfuTimeout);
         this.sfuClient = undefined;
         this.network = undefined;
+        this._p2pRecoveryCount = 0;
         this.state.updateAndBroadcastDebounce?.cancel();
         this.state.disconnectAudioMonitor?.();
         this.state.audioTrack?.stop();
@@ -1138,50 +1176,43 @@ export class Rtc extends Record {
                 break;
             }
         }
-        if (this.selfSession) {
-            switch (type) {
-                case "camera": {
-                    this.removeVideoFromSession(this.selfSession, {
-                        type: "camera",
-                        cleanup: false,
-                    });
-                    if (this.state.cameraTrack) {
-                        this.updateStream(this.selfSession, this.state.cameraTrack);
-                    }
-                    break;
-                }
-                case "screen": {
-                    if (!this.state.screenTrack) {
-                        this.removeVideoFromSession(this.selfSession, {
-                            type: "screen",
-                            cleanup: false,
-                        });
-                    } else {
-                        this.updateStream(this.selfSession, this.state.screenTrack);
-                    }
-                    break;
-                }
-            }
-        }
-        const updatedTrack = type === "camera" ? this.state.cameraTrack : this.state.screenTrack;
-        await this.network?.updateUpload(type, updatedTrack);
         if (!this.selfSession) {
             return;
         }
         switch (type) {
             case "camera": {
+                this.removeVideoFromSession(this.selfSession, {
+                    type: "camera",
+                    cleanup: false,
+                });
+                if (this.state.cameraTrack) {
+                    this.updateStream(this.selfSession, this.state.cameraTrack);
+                }
+                // broadcast the new state right away: updating the upload waits
+                // on the peer connections, and a peer that never completes its
+                // handshake must not block the flag for everyone else
                 this.updateAndBroadcast({
                     isCameraOn: !!this.state.sendCamera,
                 });
                 break;
             }
             case "screen": {
+                if (!this.state.screenTrack) {
+                    this.removeVideoFromSession(this.selfSession, {
+                        type: "screen",
+                        cleanup: false,
+                    });
+                } else {
+                    this.updateStream(this.selfSession, this.state.screenTrack);
+                }
                 this.updateAndBroadcast({
                     isScreenSharingOn: !!this.state.sendScreen,
                 });
                 break;
             }
         }
+        const updatedTrack = type === "camera" ? this.state.cameraTrack : this.state.screenTrack;
+        await this.network?.updateUpload(type, updatedTrack);
     }
 
     updateAndBroadcast(data) {
@@ -1292,6 +1323,9 @@ export class Rtc extends Record {
                 );
                 this.store.settings.useBlur = false;
             }
+        } else if (!this.store.settings.useBlur && type === "camera") {
+            this.blurManager?.close();
+            this.blurManager = undefined;
         }
         switch (type) {
             case "camera": {

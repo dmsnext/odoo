@@ -55,6 +55,12 @@ class Authenticate(http.Controller):
         updated_redirect = parsed_redirect.replace(query=werkzeug.urls.url_encode(params))
         return request.redirect(updated_redirect.to_url(), local=False)
 
+    @http.route(['/mail_plugin/auth/check_version'], type='json', auth="none", cors="*",
+                methods=['POST', 'OPTIONS'])
+    def auth_check_version(self):
+        """Allow to know if the module is installed and which addin version is supported."""
+        return 1
+
     # In this case, an exception will be thrown in case of preflight request if only POST is allowed.
     @http.route(['/mail_client_extension/auth/access_token', '/mail_plugin/auth/access_token'], type='json', auth="none", cors="*",
                 methods=['POST', 'OPTIONS'])
@@ -71,12 +77,19 @@ class Authenticate(http.Controller):
         auth_message = self._get_auth_code_data(auth_code)
         if not auth_message:
             return {"error": "Invalid code"}
+        if auth_message.get('scope') != 'outlook':
+            return {"error": "Invalid scope"}
         request.update_env(user=auth_message['uid'])
         scope = 'odoo.plugin.' + auth_message.get('scope', '')
-        api_key = request.env['res.users.apikeys']._generate(
+        expiration_days = int(request.env['ir.config_parameter'].sudo().get_param(
+            'mail_plugin.access_token_expiration_days', 30))
+        if expiration_days <= 0:
+            expiration_days = 30
+        # created in SUDO to ignore the limit
+        api_key = request.env['res.users.apikeys'].sudo()._generate(
             scope,
             auth_message['name'],
-            datetime.datetime.now() + datetime.timedelta(days=1)
+            datetime.datetime.now() + datetime.timedelta(days=expiration_days),
         )
         return {'access_token': api_key}
 

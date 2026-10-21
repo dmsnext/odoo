@@ -125,15 +125,14 @@ class Product(models.Model):
     def _compute_quantities(self):
         products = self.with_context(prefetch_fields=False).filtered(lambda p: p.type != 'service').with_context(prefetch_fields=True)
         res = products._compute_quantities_dict(self._context.get('lot_id'), self._context.get('owner_id'), self._context.get('package_id'), self._context.get('from_date'), self._context.get('to_date'))
+        # Set qty fields to 0 for all products as services have 0 quantities. Also skips calling __setitem__ on products with 0 quantites in res.
+        self.qty_available = 0.0
+        self.incoming_qty = 0.0
+        self.outgoing_qty = 0.0
+        self.virtual_available = 0.0
+        self.free_qty = 0.0
         for product in products:
-            product.update(res[product.id])
-        # Services need to be set with 0.0 for all quantities
-        services = self - products
-        services.qty_available = 0.0
-        services.incoming_qty = 0.0
-        services.outgoing_qty = 0.0
-        services.virtual_available = 0.0
-        services.free_qty = 0.0
+            product.update({key: val for key, val in res[product.id].items() if val})
 
     def _compute_quantities_dict(self, lot_id, owner_id, package_id, from_date=False, to_date=False):
         domain_quant_loc, domain_move_in_loc, domain_move_out_loc = self._get_domain_locations()
@@ -173,17 +172,17 @@ class Product(models.Model):
         moves_in_res = {product.id: product_qty for product, product_qty in Move._read_group(domain_move_in_todo, ['product_id'], ['product_qty:sum'])}
         moves_out_res = {product.id: product_qty for product, product_qty in Move._read_group(domain_move_out_todo, ['product_id'], ['product_qty:sum'])}
         quants_res = {product.id: (quantity, reserved_quantity) for product, quantity, reserved_quantity in Quant._read_group(domain_quant, ['product_id'], ['quantity:sum', 'reserved_quantity:sum'])}
+        moves_in_res_past = defaultdict(float)
+        moves_out_res_past = defaultdict(float)
         if dates_in_the_past:
             # Calculate the moves that were done before now to calculate back in time (as most questions will be recent ones)
             domain_move_in_done = [('state', '=', 'done'), ('date', '>', to_date)] + domain_move_in_done
             domain_move_out_done = [('state', '=', 'done'), ('date', '>', to_date)] + domain_move_out_done
 
             groupby = ['product_id', 'product_uom']
-            moves_in_res_past = defaultdict(float)
             for product, uom, quantity in Move._read_group(domain_move_in_done, groupby, ['quantity:sum']):
                 moves_in_res_past[product.id] += uom._compute_quantity(quantity, product.uom_id)
 
-            moves_out_res_past = defaultdict(float)
             for product, uom, quantity in Move._read_group(domain_move_out_done, groupby, ['quantity:sum']):
                 moves_out_res_past[product.id] += uom._compute_quantity(quantity, product.uom_id)
 
@@ -191,7 +190,13 @@ class Product(models.Model):
         for product in self.with_context(prefetch_fields=False):
             origin_product_id = product._origin.id
             product_id = product.id
-            if not origin_product_id:
+            if not origin_product_id or (
+                origin_product_id not in quants_res
+                and origin_product_id not in moves_in_res
+                and origin_product_id not in moves_out_res
+                and origin_product_id not in moves_in_res_past
+                and origin_product_id not in moves_out_res_past
+            ):
                 res[product_id] = dict.fromkeys(
                     ['qty_available', 'free_qty', 'incoming_qty', 'outgoing_qty', 'virtual_available'],
                     0.0,
@@ -316,7 +321,7 @@ class Product(models.Model):
         if self.env.context.get('strict'):
             loc_domain = [('location_id', 'in', locations.ids)]
             dest_loc_domain = [('location_dest_id', 'in', locations.ids)]
-            dest_loc_domain_out = [('location_dest_id', 'in', locations.ids)]
+            dest_loc_domain_out = [('location_dest_id', 'not in', locations.ids)]
         elif locations:
             paths_domain = expression.OR([[('parent_path', '=like', loc.parent_path + '%')] for loc in locations])
             loc_domain = [('location_id', 'any', paths_domain)]
@@ -372,6 +377,12 @@ class Product(models.Model):
         return self._search_product_quantity(operator, value, 'outgoing_qty')
 
     def _search_free_qty(self, operator, value):
+        if not ({'from_date', 'to_date'} & set(self.env.context.keys())):
+            product_ids = self._search_field_by_quants(
+                operator, value, self.env.context.get('lot_id'), self.env.context.get('owner_id'),
+                self.env.context.get('package_id'), field="free_qty"
+            )
+            return [('id', 'in', product_ids)]
         return self._search_product_quantity(operator, value, 'free_qty')
 
     def _search_product_quantity(self, operator, value, field):
@@ -394,6 +405,9 @@ class Product(models.Model):
         return [('id', 'in', ids)]
 
     def _search_qty_available_new(self, operator, value, lot_id=False, owner_id=False, package_id=False):
+        return self._search_field_by_quants(operator, value, lot_id, owner_id, package_id)
+
+    def _search_field_by_quants(self, operator, value, lot_id=False, owner_id=False, package_id=False, field="qty_available"):
         ''' Optimized method which doesn't search on stock.moves, only on stock.quants. '''
         if operator not in ('<', '>', '=', '!=', '<=', '>='):
             raise UserError(_('Invalid domain operator %s', operator))
@@ -408,21 +422,22 @@ class Product(models.Model):
             domain_quant.append(('owner_id', '=', owner_id))
         if package_id:
             domain_quant.append(('package_id', '=', package_id))
-        quants_groupby = self.env['stock.quant']._read_group(domain_quant, ['product_id'], ['quantity:sum'])
+        quants_groupby = self.env['stock.quant']._read_group(domain_quant, ['product_id'], ['quantity:sum', 'reserved_quantity:sum'])
 
         # check if we need include zero values in result
         include_zero = (
             value < 0.0 and operator in ('>', '>=') or
             value > 0.0 and operator in ('<', '<=') or
-            value == 0.0 and operator in ('>=', '<=', '=')
+            float_is_zero(value, precision_digits=8) and operator in ('>=', '<=', '=')
         )
 
         processed_product_ids = set()
-        for product, quantity_sum in quants_groupby:
+        for product, quantity_sum, reserved_sum in quants_groupby:
             product_id = product.id
+            field_sum = quantity_sum - reserved_sum if field == "free_qty" else quantity_sum
             if include_zero:
                 processed_product_ids.add(product_id)
-            if OPERATORS[operator](quantity_sum, value):
+            if OPERATORS[operator](field_sum, value):
                 product_ids.add(product_id)
 
         if include_zero:
@@ -565,7 +580,7 @@ class Product(models.Model):
         )
 
         # If user have rights to write on quant, we define the view as editable.
-        if self.env.user.has_group('stock.group_stock_manager'):
+        if self.env.user.has_group('stock.group_stock_user'):
             self = self.with_context(inventory_mode=True)
             # Set default location id if multilocations is inactive
             if not self.env.user.has_group('stock.group_stock_multi_locations'):
@@ -762,7 +777,7 @@ class ProductTemplate(models.Model):
 
     @api.depends('type')
     def compute_is_storable(self):
-        self.filtered(lambda t: t.type != 'consu' and t.is_storable).is_storable = False
+        self.filtered(lambda t: t.type != 'consu' and t.is_storable).write({"is_storable": False})
 
     @api.depends('is_storable')
     def _compute_show_qty_status_button(self):
@@ -949,7 +964,7 @@ class ProductTemplate(models.Model):
             ], limit=1)
             if existing_reserved_move_lines:
                 raise UserError(_("You can not change the inventory tracking of a product that is currently reserved on a stock move. If you need to change the inventory tracking, you should first unreserve the stock move."))
-        if 'is_storable' in vals and not vals['is_storable'] and any(p.is_storable and not float_is_zero(p.qty_available, precision_rounding=p.uom_id.rounding) for p in self):
+        if 'is_storable' in vals and not vals['is_storable'] and any(p.is_storable and p.uom_id and not float_is_zero(p.qty_available, precision_rounding=p.uom_id.rounding) for p in self):
             raise UserError(_("Available quantity should be set to zero before changing inventory tracking"))
         return super().write(vals)
 
@@ -1052,6 +1067,8 @@ class ProductTemplate(models.Model):
 
     def action_product_tmpl_forecast_report(self):
         self.ensure_one()
+        if not self.env.user._get_default_warehouse_id():
+            self.env['stock.warehouse']._warehouse_redirect_warning()
         action = self.env["ir.actions.actions"]._for_xml_id('stock.stock_forecasted_product_template_action')
         return action
 

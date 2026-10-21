@@ -239,6 +239,53 @@ registry.category("web_tour.tours").add("RefundFewQuantities", {
         ].flat(),
 });
 
+registry.category("web_tour.tours").add("test_order_refund_flow", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            ProductScreen.addOrderline("Desk Pad", "2", "3"),
+            ProductScreen.addOrderline("Letter Tray", "3", "2"),
+            ProductScreen.clickPayButton(),
+            PaymentScreen.clickPaymentMethod("Bank"),
+            PaymentScreen.clickValidate(),
+            ReceiptScreen.isShown(),
+            ReceiptScreen.clickNextOrder(),
+            // First refund order
+            ProductScreen.clickRefund(),
+            TicketScreen.selectOrder("-0001"),
+            ProductScreen.clickNumpad("1"),
+            TicketScreen.toRefundTextContains("To Refund: 1.00"),
+            TicketScreen.confirmRefund(),
+            { ...ProductScreen.back(), isActive: ["mobile"] },
+            ProductScreen.isShown(),
+            inLeftSide([...Order.hasLine("Desk Pad", "-1")]),
+            // Second refund order
+            Chrome.createFloatingOrder(),
+            ProductScreen.clickRefund(),
+            TicketScreen.selectOrder("-0001"),
+            TicketScreen.toRefundTextContains("Refunding"),
+            inLeftSide([...ProductScreen.clickLine("Letter Tray", "3.0")]),
+            ProductScreen.clickNumpad("1"),
+            TicketScreen.toRefundTextContains("To Refund: 1.00"),
+            TicketScreen.confirmRefund(),
+            { ...ProductScreen.back(), isActive: ["mobile"] },
+            ProductScreen.isShown(),
+            // Verify refund order has only one line
+            inLeftSide([...Order.hasLine("Letter Tray", "-1")]),
+            ProductScreen.totalAmountIs("-2.20"),
+            // Delete both refunding orders
+            Chrome.clickMenuOption("Orders"),
+            TicketScreen.deleteOrder("-0002"),
+            Dialog.confirm(),
+            TicketScreen.deleteOrder("-0003"),
+            Dialog.confirm(),
+            TicketScreen.selectFilter("Paid"),
+            TicketScreen.selectOrder("-0001"),
+            TicketScreen.noLinesToRefund(),
+        ].flat(),
+});
+
 registry.category("web_tour.tours").add("LotTour", {
     steps: () =>
         [
@@ -326,5 +373,91 @@ registry.category("web_tour.tours").add("test_serial_number_do_not_duplicate_aft
                     }
                 },
             }),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_not_available_pricelist_not_set_on_order", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            Chrome.clickMenuOption("Orders"),
+            TicketScreen.selectFilter("Paid"),
+            TicketScreen.clickDiscard(),
+            ProductScreen.isShown(),
+            ProductScreen.addOrderline("Desk Pad", "2", "3"),
+            ProductScreen.clickPartnerButton(),
+            ProductScreen.clickCustomer("AA Customer"),
+            ProductScreen.clickPayButton(),
+            PaymentScreen.clickPaymentMethod("Bank"),
+            PaymentScreen.clickValidate(),
+            ReceiptScreen.isShown(),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_refund_backend_duplicate", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            ProductScreen.clickPayButton(),
+            PaymentScreen.clickPaymentMethod("Bank"),
+            PaymentScreen.clickValidate(),
+            TicketScreen.receiptTotalAmountIs("-10.00"),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_ticket_screen_keeps_variants_collapsed", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            ProductScreen.productCardCountIs("Variant Soup", 1),
+            Chrome.clickMenuOption("Orders"),
+            TicketScreen.selectFilter("Paid"),
+            TicketScreen.contains("Test/0001"),
+            TicketScreen.clickDiscard(),
+            ProductScreen.productCardCountIs("Variant Soup", 1),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_synced_products_keep_variants_collapsed", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            ProductScreen.productCardCountIs("Variant Soup", 1),
+            {
+                content: "receive the paid order's products as another device would",
+                trigger: ".pos",
+                run: async () => {
+                    const pos = odoo.__WOWL_DEBUG__.root.env.services.pos;
+                    const [order] = await pos.data.orm.searchRead(
+                        "pos.order",
+                        [["pos_reference", "=", "Test/0001"]],
+                        ["id"]
+                    );
+                    const data = await pos.data.orm.call(
+                        "pos.order",
+                        "get_ticket_screen_order_data",
+                        [[order.id]]
+                    );
+                    await pos.deviceSync.processStaticRecords({
+                        "product.product": data["product.product"],
+                    });
+                    // The variant grouping runs after an RPC, give it time to settle.
+                    const settled = () =>
+                        pos.models["product.product"].filter(
+                            (p) => p.name === "Variant Soup" && p.available_in_pos
+                        ).length === 1 &&
+                        [...document.querySelectorAll(".product-list .product-name")].filter(
+                            (el) => el.textContent.trim() === "Variant Soup"
+                        ).length === 1;
+                    for (let i = 0; i < 50 && !settled(); i++) {
+                        await new Promise((resolve) => setTimeout(resolve, 100));
+                    }
+                },
+            },
+            ProductScreen.productCardCountIs("Variant Soup", 1),
         ].flat(),
 });

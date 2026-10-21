@@ -1,20 +1,26 @@
 /** @odoo-module */
 
-import { after, describe, expect, getFixture, test } from "@odoo/hoot";
 import {
     advanceTime,
+    after,
     animationFrame,
     clear,
     click,
     dblclick,
+    describe,
     drag,
     edit,
+    expect,
     fill,
+    getFixture,
     hover,
     keyDown,
     keyUp,
     leave,
     middleClick,
+    mockFetch,
+    mockTouch,
+    mockUserAgent,
     on,
     pointerDown,
     pointerUp,
@@ -26,9 +32,9 @@ import {
     select,
     setInputFiles,
     setInputRange,
+    test,
     uncheck,
-} from "@odoo/hoot-dom";
-import { mockFetch, mockTouch, mockUserAgent } from "@odoo/hoot-mock";
+} from "@odoo/hoot";
 import { Component, xml } from "@odoo/owl";
 import { EventList } from "@web/../lib/hoot-dom/helpers/events";
 import { mountForTest, parseUrl } from "../local_helpers";
@@ -483,6 +489,67 @@ describe(parseUrl(import.meta.url), () => {
         await click("button");
 
         expect.verifySteps(["pointerdown:0(1)@button", "pointerup:0@button", "click:0@button"]);
+    });
+
+    test("click on touch: slow listener does not suppress the click", async () => {
+        mockTouch(true);
+
+        await mountForTest(/* xml */ `<button type="button">Click me</button>`);
+
+        on("button", "pointerdown", () => advanceTime(600));
+
+        await hover("button");
+        monitorEvents("button");
+
+        await click("button");
+
+        expect.verifySteps([
+            "pointerdown:0(1)@button",
+            "focus@button",
+            "focusin@button",
+            "pointerup:0@button",
+            "click:0@button",
+        ]);
+    });
+
+    test("click on touch: a held pointer suppresses the click", async () => {
+        mockTouch(true);
+
+        await mountForTest(/* xml */ `<button type="button">Click me</button>`);
+
+        await hover("button");
+        monitorEvents("button");
+
+        await pointerDown("button");
+        await advanceTime(600);
+        await pointerUp("button");
+
+        expect.verifySteps([
+            "pointerdown:0(1)@button",
+            "focus@button",
+            "focusin@button",
+            "pointerup:0@button",
+        ]);
+    });
+
+    test("click on touch: a held drag suppresses the click on drop", async () => {
+        mockTouch(true);
+
+        await mountForTest(/* xml */ `<button type="button">Click me</button>`);
+
+        await hover("button");
+        monitorEvents("button");
+
+        const { drop } = await drag("button");
+        await advanceTime(600);
+        await drop();
+
+        expect.verifySteps([
+            "pointerdown:0(1)@button",
+            "focus@button",
+            "focusin@button",
+            "pointerup:0@button",
+        ]);
     });
 
     test("click: iframe", async () => {
@@ -1230,8 +1297,8 @@ describe(parseUrl(import.meta.url), () => {
             "pointerleave:0@input",
             "mouseleave:0@input",
             // Change
-            "blur@input",
             "change@input",
+            "blur@input",
             "focusout@input",
         ]);
     });
@@ -1428,6 +1495,24 @@ describe(parseUrl(import.meta.url), () => {
         expect("input").toHaveValue(/file\.txt/);
     });
 
+    test("setInputFiles: shadow root", async () => {
+        await mountForTest(/* xml */ `
+            <div class="container" />
+        `);
+
+        const shadow = queryOne(".container").attachShadow({
+            mode: "open",
+        });
+        const input = document.createElement("input");
+        input.type = "file";
+        shadow.appendChild(input);
+
+        await click(".container:shadow input");
+        await setInputFiles(new File([""], "file.txt"));
+
+        expect(".container:shadow input").toHaveValue(/file\.txt/);
+    });
+
     test("setInputRange: basic case and events", async () => {
         await mountForTest(/* xml */ `<input type="range" min="10" max="40" />`);
 
@@ -1508,6 +1593,20 @@ describe(parseUrl(import.meta.url), () => {
             "pointerleave:0@button",
             "mouseleave:0@button",
         ]);
+    });
+
+    test("hover and leave: shadow root", async () => {
+        await mountForTest(/* xml */ `<div class="container" />`);
+        const shadow = queryOne(".container").attachShadow({ mode: "open" });
+        const button = document.createElement("button");
+        shadow.appendChild(button);
+        for (const type of ["mouseenter", "mouseleave"]) {
+            button.addEventListener(type, () => expect.step(type));
+        }
+        await hover(".container:shadow button");
+        expect.verifySteps(["mouseenter"]);
+        await leave();
+        expect.verifySteps(["mouseleave"]);
     });
 
     test("keyDown", async () => {
@@ -1735,6 +1834,8 @@ describe(parseUrl(import.meta.url), () => {
             "focus@input",
             "focusin@input",
             "focusin@form",
+            "keyup:Tab@input",
+            "keyup:Tab@form",
             // Enter
             "keydown:Enter@input",
             "keydown:Enter@form",
@@ -1766,6 +1867,8 @@ describe(parseUrl(import.meta.url), () => {
             "focus@button",
             "focusin@button",
             "focusin@form",
+            "keyup:Tab@button",
+            "keyup:Tab@form",
             // Enter
             "keydown:Enter@button",
             "keydown:Enter@form",
@@ -1798,6 +1901,8 @@ describe(parseUrl(import.meta.url), () => {
             "focus@button",
             "focusin@button",
             "focusin@form",
+            "keyup:Tab@button",
+            "keyup:Tab@form",
             // Enter
             "keydown:Enter@button",
             "keydown:Enter@form",
@@ -1817,10 +1922,11 @@ describe(parseUrl(import.meta.url), () => {
             </form>
         `);
 
-        mockFetch((url, { body, method }) => {
+        mockFetch((url, { body, headers, method }) => {
             expect.step(new URL(url).pathname);
 
-            expect(method).toBe("post");
+            expect(method).toBe("POST");
+            expect(headers).toEqual(new Headers([["Content-Type", "multipart/form-data"]]));
             expect(body).toBeInstanceOf(FormData);
             expect(body.get("csrf_token")).toBe("CSRF_TOKEN_VALUE");
             expect(body.get("name")).toBe("Pierre");

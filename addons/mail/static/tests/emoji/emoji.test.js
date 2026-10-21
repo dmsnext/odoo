@@ -1,4 +1,4 @@
-import { patchTranslations, preloadBundle } from "@web/../tests/web_test_helpers";
+import { patchTranslations, patchWithCleanup, preloadBundle } from "@web/../tests/web_test_helpers";
 
 import {
     click,
@@ -10,17 +10,18 @@ import {
     startServer,
     triggerHotkey,
 } from "@mail/../tests/mail_test_helpers";
-import { describe, getFixture, test } from "@odoo/hoot";
+import { describe, expect, getFixture, test } from "@odoo/hoot";
 
-import { queryFirst } from "@odoo/hoot-dom";
+import { queryAllTexts, queryFirst } from "@odoo/hoot-dom";
 
 describe.current.tags("desktop");
 defineMailModels();
 preloadBundle("web.assets_emoji");
 
-test("emoji picker works well with translation with double quotes", async () => {
+test("emoji picker correctly handles translations with special characters", async () => {
     patchTranslations({
         "Japanese “here” button": `Bouton "ici" japonais`,
+        "heavy dollar sign": `Symbole du dollar\nlourd`,
     });
     const pyEnv = await startServer();
     const channelId = pyEnv["discuss.channel"].create({ name: "" });
@@ -29,6 +30,8 @@ test("emoji picker works well with translation with double quotes", async () => 
     await click("button[aria-label='Emojis']");
     await insertText("input[placeholder='Search emoji']", "ici");
     await contains(`.o-Emoji[title='Bouton "ici" japonais']`);
+    await insertText("input[placeholder='Search emoji']", "dollar", { replace: true });
+    await contains(`.o-Emoji[title*='Symbole du dollar']`);
 });
 
 test("search emoji from keywords", async () => {
@@ -211,7 +214,59 @@ test("selecting an emoji while holding down the Shift key prevents the emoji pic
     await openDiscuss(channelId);
     await click("button[aria-label='Emojis']");
     await click(".o-EmojiPicker-content .o-Emoji", { shiftKey: true, text: "👺" });
-    await contains(".o-EmojiPicker-navbar [title='Frequently used']");
+    await contains(".o-EmojiPicker-navbar [title='Smileys & Emotion']");
     await contains(".o-EmojiPicker");
     await contains(".o-mail-Composer-input", { value: "👺" });
+});
+
+test("Emoji picker shows failure to load emojis", async () => {
+    // Simulate failure to load emojis
+    patchWithCleanup(odoo.loader.modules.get("@web/core/emoji_picker/emoji_data"), {
+        getEmojis() {
+            return [];
+        },
+    });
+    const pyEnv = await startServer();
+    const channelId = pyEnv["discuss.channel"].create({ name: "" });
+    await start();
+    await openDiscuss(channelId);
+    await click("button[aria-label='Emojis']");
+    await contains(".o-EmojiPicker", { text: "😵‍💫Failed to load emojis..." });
+});
+
+test("Frequently used category only appears when the emoji picker is reopened", async () => {
+    const pyEnv = await startServer();
+    const channelId = pyEnv["discuss.channel"].create({ name: "" });
+    await start();
+    await openDiscuss(channelId);
+    await click("button[aria-label='Emojis']");
+    await click(".o-EmojiPicker-content .o-Emoji:text('😀')", { shiftKey: true });
+    await contains(".o-mail-Composer-input", { value: "😀" });
+    await click(".o-EmojiPicker-content .o-Emoji:text('😝')", { shiftKey: true });
+    await contains(".o-mail-Composer-input", { value: "😀😝" });
+    await contains(".o-EmojiPicker-sectionIcon", { count: 8 });
+    expect(queryAllTexts(".o-EmojiPicker-sectionIcon + span")).toEqual([
+        "SMILEYS & EMOTION",
+        "PEOPLE & BODY",
+        "ANIMALS & NATURE",
+        "FOOD & DRINK",
+        "TRAVEL & PLACES",
+        "ACTIVITIES",
+        "OBJECTS",
+        "SYMBOLS",
+    ]);
+    triggerHotkey("Escape");
+    await click("button[aria-label='Emojis']");
+    await contains(".o-EmojiPicker-sectionIcon", { count: 9 });
+    expect(queryAllTexts(".o-EmojiPicker-sectionIcon + span")).toEqual([
+        "FREQUENTLY USED",
+        "SMILEYS & EMOTION",
+        "PEOPLE & BODY",
+        "ANIMALS & NATURE",
+        "FOOD & DRINK",
+        "TRAVEL & PLACES",
+        "ACTIVITIES",
+        "OBJECTS",
+        "SYMBOLS",
+    ]);
 });

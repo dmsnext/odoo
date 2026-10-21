@@ -93,7 +93,7 @@ class Company(models.Model):
                             ], order='sequence,id desc', limit=1)
                             foreign_tax_copy_name = existing_foreign_tax and _('%(tax_name)s (Copy)', tax_name=existing_foreign_tax.name)
 
-                            extra_fields = self._get_country_specific_account_tax_fields()
+                            extra_fields = company._get_country_specific_account_tax_fields()
                             foreign_taxes[tax_amount] = self.env['account.tax'].create({
                                 'name': foreign_tax_copy_name or foreign_tax_name,
                                 'amount': tax_amount,
@@ -209,7 +209,10 @@ class Company(models.Model):
         country = self._get_country_from_vat()
         chart_template = self.env['account.chart.template']._guess_chart_template(country)
         is_coa_module_installed = self.env['account.chart.template']._get_chart_template_mapping()[chart_template]['installed']
-
-        if is_coa_module_installed:
-            return EU_FIELD_MAP.get(chart_template, {})
-        return {}
+        if not is_coa_module_installed:
+            return {}
+        return {
+            field: value
+            for field, value in EU_FIELD_MAP.get(chart_template, {}).items()
+            if field in self.env['account.tax']._fields
+        }

@@ -387,6 +387,67 @@ test("draggable area contains overflowing visible elements", async () => {
     expect(".item.o_dragged").toHaveCount(0);
 });
 
+test("draggable area contains overflowing visible elements (RTL)", async () => {
+    class List extends Component {
+        static props = ["*"];
+        static template = xml`
+                <div class="controller" style="max-width: 900px; min-width: 900px; direction: rtl;">
+                    <div class="content" style="max-width: 600px;">
+                        <div t-ref="renderer" class="renderer d-flex" style="overflow: visible;">
+                            <div t-foreach="[1, 2, 3]" t-as="c" t-key="c" t-attf-class="list m-0 list{{ c }}">
+                                <div style="min-width: 300px; min-height: 50px;"
+                                    t-foreach="[1, 2, 3]" t-as="l" t-key="l" t-esc="'item' + l + '' + c" t-attf-class="item item{{ l + '' + c }}"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        setup() {
+            useSortable({
+                ref: useRef("renderer"),
+                elements: ".item",
+                groups: ".list",
+                connectGroups: true,
+                touchDelay: 0,
+            });
+        }
+    }
+
+    await mountWithCleanup(List);
+
+    const controller = queryFirst(".controller");
+    const content = queryFirst(".content");
+    const renderer = queryFirst(".renderer");
+
+    expect(content).toHaveProperty("scrollLeft", 0);
+    expect(controller).toHaveRect({ width: 900 });
+    expect(content).toHaveRect({ width: 600 });
+    expect(renderer).toHaveRect({ width: 600 });
+    expect(renderer).toHaveProperty("scrollWidth", 900);
+    expect(".item.o_dragged").toHaveCount(0);
+
+    const overflowLeft = renderer.getBoundingClientRect().right - renderer.scrollWidth;
+
+    const { cancel, moveTo } = await contains(".item11").drag();
+
+    // Drag first record of first group to the left
+    await moveTo(".list3 .item:first");
+
+    // Verify that there is no scrolling
+    expect(content).toHaveProperty("scrollLeft", 0);
+    expect(".item.o_dragged").toHaveCount(1);
+
+    // Verify that the dragged element is allowed to go inside the
+    // overflowing part of the draggable container.
+    expect(".item.o_dragged").toHaveRect({ left: overflowLeft });
+    expect(".list3 .item:first").toHaveRect({ left: overflowLeft });
+
+    // Cancel drag
+    await cancel();
+
+    expect(".item.o_dragged").toHaveCount(0);
+});
+
 test("Dynamically disable sortable feature", async () => {
     expect.assertions(3);
 
@@ -627,4 +688,54 @@ test("clone option", async () => {
     // First item after 2nd item
     await contains(".item:first-child").dragAndDrop(".item:nth-child(2)");
     expect(".placeholder:not(.item)").toHaveCount(0);
+});
+
+test("dragged element is removed from the DOM while being dragged", async () => {
+    class List extends Component {
+        static props = ["*"];
+        static template = xml`
+            <div t-ref="root" class="root">
+                <ul class="list">
+                    <li t-foreach="state.items" t-as="i" t-key="i" t-esc="i" class="item" />
+                </ul>
+            </div>`;
+        setup() {
+            this.state = useState({
+                items: [1, 2, 3],
+            });
+            useSortable({
+                ref: useRef("root"),
+                elements: ".item",
+                onDragStart() {
+                    expect.step("start");
+                },
+                onDragEnd() {
+                    expect.step("end");
+                },
+                onDrop() {
+                    expect.step("drop"); // should not be called
+                },
+            });
+        }
+    }
+
+    const list = await mountWithCleanup(List);
+
+    expect(".item:visible").toHaveCount(3);
+    expect(".o_dragged").toHaveCount(0);
+    expect.verifySteps([]);
+
+    const { drop, moveTo } = await contains(".item:first-child").drag();
+    expect(".o_dragged").toHaveCount(1);
+    expect.verifySteps(["start"]);
+
+    await moveTo(".item:nth-child(2)");
+    expect(".o_dragged").toHaveCount(1);
+
+    list.state.items = [3, 4];
+    await animationFrame();
+    expect(".item:visible").toHaveCount(2);
+    expect(".o_dragged").toHaveCount(0);
+    await drop();
+    expect.verifySteps(["end"]);
 });

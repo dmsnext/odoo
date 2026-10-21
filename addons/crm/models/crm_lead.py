@@ -318,7 +318,7 @@ class Lead(models.Model):
     @api.depends('team_id', 'type')
     def _compute_stage_id(self):
         for lead in self:
-            if not lead.stage_id:
+            if not lead.stage_id or (lead.team_id and lead.stage_id.team_id and lead.team_id != lead.stage_id.team_id):
                 lead.stage_id = lead._stage_find(domain=[('fold', '=', False)]).id
 
     @api.depends('user_id')
@@ -537,10 +537,10 @@ class Lead(models.Model):
                 lead.meeting_display_date = False
                 lead.meeting_display_label = _('No Meeting')
             elif lead_meeting_info['next_meeting_date']:
-                lead.meeting_display_date = lead_meeting_info['next_meeting_date']
+                lead.meeting_display_date = fields.Datetime.context_timestamp(lead, lead_meeting_info['next_meeting_date'])
                 lead.meeting_display_label = _('Next Meeting')
             else:
-                lead.meeting_display_date = lead_meeting_info['last_meeting_date']
+                lead.meeting_display_date = fields.Datetime.context_timestamp(lead, lead_meeting_info['last_meeting_date'])
                 lead.meeting_display_label = _('Last Meeting')
 
     @api.depends('email_domain_criterion', 'email_normalized', 'partner_id',
@@ -918,7 +918,7 @@ class Lead(models.Model):
         for lead, vals in zip(self, vals_list):
             vals.setdefault('type', lead.type)
             vals.setdefault('team_id', lead.team_id.id)
-            vals['date_open'] = now if lead.type == 'opportunity' else False
+            vals['date_open'] = now if lead.type == 'opportunity' and lead.user_id.active else False
             if not lead.user_id.active:
                 vals['user_id'] = False
         return vals_list
@@ -2062,7 +2062,7 @@ class Lead(models.Model):
             name_from_email = name_emails[0][0] if name_emails else False
             if name_from_email:
                 continue  # already containing name + email
-            name_from_email = self.partner_name or self.contact_name
+            name_from_email = self.contact_name or self.partner_name
             emails_normalized = tools.email_normalize_all(email)
             email_normalized = emails_normalized[0] if emails_normalized else False
             if email.lower() == self.email_from.lower() or (email_normalized and self.email_normalized == email_normalized):
@@ -2193,10 +2193,13 @@ class Lead(models.Model):
             result[-1][field]['lost_total'] += frequency['lost_count']
 
         # Get all won, lost and total count for all records in frequencies per team_id
+        first_teamless_stage = self.env['crm.stage'].search([('team_id', '=', False)], order='sequence, id', limit=1)
         for team_id in result:
             result[team_id]['team_won'], \
             result[team_id]['team_lost'], \
-            result[team_id]['team_total'] = self._pls_get_won_lost_total_count(result[team_id])
+            result[team_id]['team_total'] = self.with_context(
+                crm_pls_first_teamless_stage_id=first_teamless_stage.id,
+            )._pls_get_won_lost_total_count(result[team_id])
 
         save_team_id = None
         p_won, p_lost = 1, 1
@@ -2551,10 +2554,12 @@ class Lead(models.Model):
         :return: won count, lost count and total count for all records in frequencies
         """
         # TODO : check if we need to handle specific team_id stages [for lost count] (if first stage in sequence is team_specific)
-        first_stage_id = self.env['crm.stage'].search([('team_id', '=', False)], order='sequence, id', limit=1)
-        if str(first_stage_id.id) not in team_results.get('stage_id', []):
+        first_teamless_stage_id = self.env.context.get('crm_pls_first_teamless_stage_id')
+        if first_teamless_stage_id is None:
+            first_teamless_stage_id = self.env['crm.stage'].search([('team_id', '=', False)], order='sequence, id', limit=1).id
+        if str(first_teamless_stage_id) not in team_results.get('stage_id', []):
             return 0, 0, 0
-        stage_result = team_results['stage_id'][str(first_stage_id.id)]
+        stage_result = team_results['stage_id'][str(first_teamless_stage_id)]
         return stage_result['won'], stage_result['lost'], stage_result['won'] + stage_result['lost']
 
     # PLS: Rebuild Frequency Table Tools

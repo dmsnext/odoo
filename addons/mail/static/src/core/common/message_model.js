@@ -111,6 +111,15 @@ export class Message extends Record {
             return Boolean(div.querySelector("a:not([data-oe-model])"));
         },
     });
+    hasMailNotificationSummary = Record.attr(false, {
+        compute() {
+            return Boolean(
+                createDocumentFragmentFromContent(this.body).querySelector(
+                    '[summary="o_mail_notification"]'
+                )
+            );
+        },
+    });
     /** @type {number|string} */
     id;
     /** @type {boolean} */
@@ -335,13 +344,15 @@ export class Message extends Record {
 
     isTranslatable(thread) {
         return (
+            !this.isBodyEmpty &&
+            !this.hasMailNotificationSummary &&
             this.store.hasMessageTranslationFeature &&
             !["discuss.channel", "mail.box"].includes(thread?.model)
         );
     }
 
     get hasTextContent() {
-        return !this.isBodyEmpty;
+        return !this.isBodyEmpty || this.subject;
     }
 
     isEmpty = Record.attr(false, {
@@ -376,7 +387,8 @@ export class Message extends Record {
             this.isBodyEmpty &&
             this.attachment_ids.length === 0 &&
             this.trackingValues.length === 0 &&
-            !this.subtype_description
+            !this.subtype_description &&
+            !this.subject
         );
     }
 
@@ -518,9 +530,12 @@ export class Message extends Record {
         );
     }
 
-    async remove() {
+    async remove({ removeFromThread = false } = {}) {
         const data = await rpc("/mail/message/update_content", this.removeParams);
         this.store.insert(data, { html: true });
+        if (this.thread && removeFromThread) {
+            this.thread.messages = this.thread.messages.filter((message) => message.notEq(this));
+        }
         return data;
     }
 
@@ -529,6 +544,7 @@ export class Message extends Record {
             attachment_ids: [],
             attachment_tokens: [],
             body: "",
+            subject: "",
             message_id: this.id,
             ...this.thread.rpcParams,
         };

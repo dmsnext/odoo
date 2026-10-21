@@ -5,6 +5,7 @@ from markupsafe import Markup
 
 from .test_project_base import TestProjectCommon
 from odoo import Command
+from odoo.tests import Form
 from odoo.tools import mute_logger
 from odoo.addons.mail.tests.common import MailCommon
 from odoo.exceptions import AccessError
@@ -170,6 +171,31 @@ class TestProjectFlow(TestProjectCommon, MailCommon):
         )
 
     @mute_logger('odoo.addons.mail.models.mail_thread')
+    def test_task_creation_from_mail(self):
+        server = self.env['fetchmail.server'].create({
+            'name': 'Test server',
+            'user': 'test@example.com',
+            'password': '',
+        })
+        task_id = self.env["mail.thread"].with_context(
+            default_fetchmail_server_id=server.id
+        ).message_process(
+            server.object_id.model,
+            EMAIL_TPL.format(
+                cc="",
+                email_from="chell@gladys.portal",
+                to=f"project+pigs@{self.alias_domain}",
+                subject="In a cage",
+                msg_id="<on.antibiotics@example.com>",
+            ),
+            save_original=server.original,
+            strip_attachments=not server.attach,
+        )
+        task = self.env['project.task'].browse(task_id)
+        self.assertEqual(task.name, "In a cage")
+        self.assertEqual(task.project_id, self.project_pigs)
+
+    @mute_logger('odoo.addons.mail.models.mail_thread')
     def test_auto_create_partner(self):
         email = 'unknown@test.com'
         new_partner = self.env['res.partner'].search([('email', '=', email)])
@@ -189,6 +215,34 @@ class TestProjectFlow(TestProjectCommon, MailCommon):
         self.assertTrue(new_partner)
         self.assertEqual(task.partner_id, new_partner)
         self.assertEqual(task.message_ids.author_id, new_partner)
+
+    def test_partner_follows_project_change_on_new_task(self):
+        """ Selecting the project of a new task should set the customer to that
+        project's customer. """
+        project = self.env['project.project'].create({
+            'name': 'Project with partner',
+            'partner_id': self.partner_2.id,
+        })
+        task_form = Form(self.env['project.task'])
+        task_form.project_id = self.project_pigs
+        task_form.project_id = project
+        self.assertEqual(task_form.partner_id, self.partner_2)
+
+    def test_partner_kept_on_existing_task_project_change(self):
+        """ Changing the project of an existing task should keep its customer,
+        which may already carry linked records. """
+        project = self.env['project.project'].create({
+            'name': 'Project with partner',
+            'partner_id': self.partner_2.id,
+        })
+        task = self.env['project.task'].create({
+            'name': 'Task',
+            'project_id': self.project_pigs.id,
+            'partner_id': self.partner_1.id,
+        })
+        with Form(task) as task_form:
+            task_form.project_id = project
+        self.assertEqual(task.partner_id, self.partner_1)
 
     def test_subtask_process(self):
         """

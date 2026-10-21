@@ -1,11 +1,13 @@
 /** @odoo-module */
 
-import { describe, expect, getFixture, test } from "@odoo/hoot";
 import {
     animationFrame,
     click,
+    describe,
+    expect,
     formatXml,
     getActiveElement,
+    getFixture,
     getFocusableElements,
     getNextFocusableElement,
     getPreviousFocusableElement,
@@ -14,16 +16,17 @@ import {
     isFocusable,
     isInDOM,
     isVisible,
+    mockTouch,
     queryAll,
     queryAllRects,
     queryAllTexts,
     queryFirst,
     queryOne,
     queryRect,
+    test,
     waitFor,
     waitForNone,
-} from "@odoo/hoot-dom";
-import { mockTouch } from "@odoo/hoot-mock";
+} from "@odoo/hoot";
 import { getParentFrame } from "@web/../lib/hoot-dom/helpers/dom";
 import { mountForTest, parseUrl } from "../local_helpers";
 
@@ -403,6 +406,33 @@ describe(parseUrl(import.meta.url), () => {
         expect.verifySteps(["new-element"]);
     });
 
+    test("waitFor: waits for matching count", async () => {
+        const el1 = document.createElement("div");
+        el1.className = "new-element";
+
+        const el2 = document.createElement("div");
+        el2.className = "new-element";
+
+        waitFor(".new-element", { count: 2 }).then(() => expect.step("found"));
+        getFixture().append(el1);
+
+        await animationFrame();
+
+        expect.verifySteps([]);
+
+        getFixture().append(el2);
+
+        await animationFrame();
+
+        expect.verifySteps(["found"]);
+    });
+
+    test("waitFor: rejects with unmatched count", async () => {
+        await expect(waitFor("never", { count: 1, timeout: 1 })).rejects.toThrow(
+            `expected at least 1 element after 1ms and found 0 elements instead of 1: 0 matching "never"`
+        );
+    });
+
     test("waitForNone: DOM empty", async () => {
         waitForNone(".title").then(() => expect.step("none"));
         expect.verifySteps([]);
@@ -466,12 +496,16 @@ describe(parseUrl(import.meta.url), () => {
             expectSelector(".title:eq('1')").toEqualNodes(".title", { index: 1 });
             expectSelector('.title:eq("1")').toEqualNodes(".title", { index: 1 });
 
-            // :contains (text)
+            // :contains
             expectSelector("main > .text:contains(ipsum)").toEqualNodes("p");
             expectSelector(".text:contains(/\\bL\\w+\\b\\sipsum/)").toEqualNodes("p");
             expectSelector(".text:contains(item)").toEqualNodes("li");
 
-            // :contains (value)
+            // :text
+            expectSelector(".text:text(item)").toEqualNodes("");
+            expectSelector(".text:text(first item)").toEqualNodes("li:first-of-type");
+
+            // :value
             expectSelector("input:value(john)").toEqualNodes("[name=name],[name=email]");
             expectSelector("input:value(john doe)").toEqualNodes("[name=name]");
             expectSelector("input:value('John Doe (JOD)')").toEqualNodes("[name=name]");
@@ -491,6 +525,17 @@ describe(parseUrl(import.meta.url), () => {
             expectSelector(":iframe p:contains(iframe text content)").toEqualNodes("p", {
                 root: "iframe",
             });
+        });
+
+        test("query options", async () => {
+            await mountForTest(FULL_HTML_TEMPLATE);
+
+            expect($$("input", { count: 2 })).toHaveLength(2);
+            expect(() => $$("input", { count: 1 })).toThrow();
+
+            expect($$("option", { count: 6 })).toHaveLength(6);
+            expect($$("option", { count: 3, root: "[name=title]" })).toHaveLength(3);
+            expect(() => $$("option", { count: 6, root: "[name=title]" })).toThrow();
         });
 
         test("advanced use cases", async () => {
@@ -596,9 +641,9 @@ describe(parseUrl(import.meta.url), () => {
                     <div>PA4: PAV41</div>
                 </span>
             `);
-            expectSelector(
-                `span:contains("Matrix (PAV11, PAV22, PAV31)\nPA4: PAV41")`
-            ).toEqualNodes("span");
+            expectSelector(`span:contains("Matrix (PAV11, PAV22, PAV31) PA4: PAV41")`).toEqualNodes(
+                "span"
+            );
         });
 
         test(":has(...):first", async () => {
@@ -730,7 +775,7 @@ describe(parseUrl(import.meta.url), () => {
             `);
 
             expectSelector(
-                `.o_content:has(.o_field_widget[name=messages]):has(td:contains(/^bbb$/)):has(td:contains(/^\\[test_trigger\\] Mitchell Admin$/))`
+                `.o_content:has(.o_field_widget[name=messages]):has(td:text(bbb)):has(td:contains(/^\\[test_trigger\\] Mitchell Admin/))`
             ).toEqualNodes(".o_content");
         });
 
@@ -861,7 +906,7 @@ describe(parseUrl(import.meta.url), () => {
             expect($1(".title:first")).toBe(getFixture().querySelector("header .title"));
 
             expect(() => $1(".title")).toThrow();
-            expect(() => $1(".title", { exact: 2 })).toThrow();
+            expect(() => $1(".title", { count: 2 })).toThrow();
         });
 
         test("queryRect", async () => {
@@ -899,10 +944,10 @@ describe(parseUrl(import.meta.url), () => {
 
             // queryOne error messages
             expect(() => $1()).toThrow(`found 0 elements instead of 1`);
-            expect(() => $$([], { exact: 18 })).toThrow(`found 0 elements instead of 18`);
+            expect(() => $$([], { count: 18 })).toThrow(`found 0 elements instead of 18`);
             expect(() => $1("")).toThrow(`found 0 elements instead of 1: 0 matching ""`);
-            expect(() => $$(".tralalero", { exact: -20 })).toThrow(
-                `found 1 element instead of -20: 1 matching ".tralalero"`
+            expect(() => $$(".tralalero", { count: -20 })).toThrow(
+                `invalid 'count' option: should be a positive integer`
             );
             expect(() => $1`.tralalero:contains(Tralala):visible:scrollable:first`).toThrow(
                 `found 0 elements instead of 1: 0 matching ".tralalero:contains(Tralala):visible:scrollable:first" (1 element with text "Tralala" > 1 visible element > 0 scrollable elements)`

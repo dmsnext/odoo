@@ -2,6 +2,7 @@ import base64
 import uuid
 from markupsafe import Markup
 from odoo import _, fields, models, api
+from odoo.exceptions import UserError
 from odoo.tools import float_repr
 from datetime import datetime
 from base64 import b64decode, b64encode
@@ -21,12 +22,18 @@ class AccountMove(models.Model):
     )
 
     def _l10n_sa_is_simplified(self):
+        # DEPRECATED - to be removed in master
         """
             Returns True if the customer is an individual, i.e: The invoice is B2C
         :return:
         """
         self.ensure_one()
-        return self.partner_id.company_type == 'person'
+
+        return (
+            self.partner_id.commercial_partner_id.company_type == "person"
+            if self.partner_id.commercial_partner_id
+            else self.partner_id.company_type == "person"
+        )
 
     @api.depends('amount_total_signed', 'amount_tax_signed', 'l10n_sa_confirmation_datetime', 'company_id',
                  'company_id.vat', 'journal_id', 'journal_id.l10n_sa_production_csid_json', 'edi_document_ids',
@@ -141,6 +148,13 @@ class AccountMove(models.Model):
             if move.l10n_sa_chain_index:
                 move.show_reset_to_draft_button = False
 
+    def button_draft(self):
+        # OVERRIDE
+        for move in self:
+            if move.country_code == "SA" and move.l10n_sa_chain_index and move.company_id.l10n_sa_api_mode == 'prod':
+                raise UserError(_("The Invoice(s) are linked to a validated EDI document and cannot be modified according to ZATCA rules"))
+        return super().button_draft()
+
     def _l10n_sa_reset_confirmation_datetime(self):
         """ OVERRIDE: we want rejected phase 2 invoices to keep the original confirmation datetime"""
         for move in self.filtered(lambda m: m.country_code == 'SA'):
@@ -224,7 +238,7 @@ class AccountMove(models.Model):
             return
 
         if not response_data.get("excepted"):
-            self.journal_id.l10n_sa_latest_submission_hash = self.env['account.edi.xml.ubl_21.zatca']._l10n_sa_generate_invoice_xml_hash(xml_content)
+            self.journal_id.sudo().l10n_sa_latest_submission_hash = self.env['account.edi.xml.ubl_21.zatca']._l10n_sa_generate_invoice_xml_hash(xml_content)
 
         self.with_context(no_new_invoice=True).message_post(body=Markup("""
                 <div role='alert' class='alert alert-%s'>
@@ -293,6 +307,14 @@ class AccountMove(models.Model):
             'total_amount': invoice_vals['vals']['monetary_total_vals']['tax_inclusive_amount'],
             'total_tax': invoice_vals['vals']['tax_total_vals'][-1]['tax_amount'],
         }
+
+    def _retry_edi_documents_error_hook(self):
+        ''' Overriden to reset the attachment and allow re-submission of ZATCA invoices,
+            Ensures that reciepts on POS are updated after a failed submission.
+        '''
+        zatca = self.env.ref('l10n_sa_edi.edi_sa_zatca')
+        self.filtered(lambda m: m._get_edi_document(zatca))._detach_attachments()
+        return super()._retry_edi_documents_error_hook()
 
 
 class AccountMoveLine(models.Model):

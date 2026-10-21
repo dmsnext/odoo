@@ -1,5 +1,5 @@
 import json
-from odoo.tests.common import RecordCapturer, HttpCase
+from odoo.tests.common import RecordCapturer, HttpCase, new_test_user
 
 
 class TestPropertiesExportImport(HttpCase):
@@ -436,3 +436,110 @@ class TestPropertiesExportImport(HttpCase):
             {'bool_prop': True, 'tags_prop': ['bb'], 'm2m_prop': self.partners[1:].ids},
             {'bool_prop': False, 'tags_prop': ['bb', 'cc'], 'm2m_prop': False},
         ])
+
+    def test_import_properties_no_acces_acl(self):
+        model_id = self.env['ir.model']._get_id(self.ModelDefinition._name)
+
+        user = new_test_user(self.env, login='AAA', groups='base.group_system')
+        self.env['ir.model.access'].search([('model_id', '=', model_id)]).unlink()
+        self.env['ir.model.access'].create({
+            'name': "don't care",
+            'model_id': model_id,
+            'group_id': self.env.ref('base.group_system').id,
+            'perm_read': False,
+        })
+
+        values_list = [
+            [
+                "Record Definition Id", f"TextType ({self.definition_records[0].display_name})",
+            ],
+            [
+                str(self.definition_records[0].id), 'One Text',
+            ],
+        ]
+        Import = self.env['base_import.import'].with_user(user)
+
+        import_wizard = Import.create({
+            'res_model': self.ModelProperty._name,
+            'file': '\n'.join([';'.join(values) for values in values_list]),
+            'file_type': 'text/csv',
+        })
+        opts = {'quoting': '"', 'separator': ';', 'has_headers': True}
+        preview = import_wizard.parse_preview(opts)
+
+        # Don't find the properties field since the user doesn't have accept to the definition model
+        self.assertEqual(
+            preview['matches'],
+            {
+                0: ['record_definition_id'],
+            },
+        )
+
+    def test_import_properties_no_acces_groups(self):
+        user = new_test_user(self.env, login='AAA', groups='base.group_system')
+        values_list = [
+            [
+                "Record Definition Id", f"TextType ({self.definition_records[0].display_name})",
+            ],
+            [
+                str(self.definition_records[0].id), 'One Text',
+            ],
+        ]
+        Import = self.env['base_import.import'].with_user(user)
+
+        # Patch groups of properties_definition
+        self.patch(self.ModelDefinition._fields['properties_definition'], "groups", "base.NO_ACCESS")
+
+        import_wizard = Import.create({
+            'res_model': self.ModelProperty._name,
+            'file': '\n'.join([';'.join(values) for values in values_list]),
+            'file_type': 'text/csv',
+        })
+        opts = {'quoting': '"', 'separator': ';', 'has_headers': True}
+        preview = import_wizard.parse_preview(opts)
+
+        # Don't find the properties field since the user doesn't have access to the field definition
+        self.assertEqual(
+            preview['matches'],
+            {
+                0: ['record_definition_id'],
+            },
+        )
+
+    def test_import_properties_definition(self):
+        definition = '[{"name": "char_prop", "type": "char", "string": "TextType"}]'
+        values_list = [
+            ["Properties Definition"],
+            [definition],
+        ]
+
+        import_wizard = self.env['base_import.import'].create({
+            'res_model': self.ModelDefinition._name,
+            'file': '\n'.join([';'.join(values) for values in values_list]),
+            'file_type': 'text/csv',
+        })
+        opts = {'quoting': '"', 'separator': ';', 'has_headers': True}
+        preview = import_wizard.parse_preview(opts)
+        self.assertEqual(preview['matches'], {0: ['properties_definition']})
+
+        with RecordCapturer(self.ModelDefinition, []) as capture:
+            results = import_wizard.execute_import(['properties_definition'], [], opts)
+
+        self.assertItemsEqual(results['messages'], [])
+        self.assertEqual(capture.records.properties_definition, json.loads(definition))
+
+    def test_import_properties_definition_invalid(self):
+        for definition, message in [
+            ("[{'name': 'char_prop', 'type': 'char', 'string': 'TextType'}]", "does not seem to be a valid JSON"),
+            ('{"name": "char_prop", "type": "char", "string": "TextType"}', "Properties definitions must be dicts"),
+            ('["char_prop"]', "Properties definitions must be dicts"),
+            ('[{"type": "char", "string": "TextType"}]', "Some key are missing"),
+            ('[{"name": "char_prop", "type": "char", "wrong_key": 1}]', "Some key are not allowed"),
+            ('[{"name": "char_prop", "type": "wrong", "string": "TextType"}]', "Wrong property type"),
+        ]:
+            with self.subTest(definition=definition):
+                results = self.ModelDefinition.load(['properties_definition'], [[definition]])
+                self.assertFalse(results['ids'])
+                # the converter reports it, the write does not blow up on it
+                self.assertNotIn('Unknown error', results['messages'][0]['message'])
+                self.assertIn(message, results['messages'][0]['message'])

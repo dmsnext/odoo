@@ -37,7 +37,7 @@ import re
 import uuid
 import warnings
 from collections import defaultdict, deque
-from collections.abc import MutableMapping, Callable
+from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import closing
 from inspect import getmembers
 from operator import attrgetter, itemgetter
@@ -386,7 +386,7 @@ READ_GROUP_DISPLAY_FORMAT = {
     # Mixing both formats, e.g. 'MMM YYYY' would yield wrong results,
     # such as 2006-01-01 being formatted as "January 2005" in some locales.
     # Cfr: http://babel.pocoo.org/en/latest/dates.html#date-fields
-    'hour': 'hh:00 dd MMM',
+    'hour': 'HH:00 dd MMM',
     'day': 'dd MMM yyyy', # yyyy = normal year
     'week': "'W'w YYYY",  # w YYYY = ISO week-year
     'month': 'MMMM yyyy',
@@ -649,10 +649,15 @@ class BaseModel(metaclass=MetaModel):
     """
 
     # default values for _transient_vacuum()
-    _transient_max_count = lazy_classproperty(lambda _: config.get('osv_memory_count_limit'))
-    "maximum number of transient records, unlimited if ``0``"
-    _transient_max_hours = lazy_classproperty(lambda _: config.get('transient_age_limit'))
-    "maximum idle lifetime (in hours), unlimited if ``0``"
+    @lazy_classproperty
+    def _transient_max_count(cls):
+        """maximum number of transient records, unlimited if ``0``"""
+        return config.get('osv_memory_count_limit')
+
+    @lazy_classproperty
+    def _transient_max_hours(cls):
+        """maximum idle lifetime (in hours), unlimited if ``0``"""
+        return config.get('transient_age_limit')
 
     def _valid_field_parameter(self, field, name):
         """ Return whether the given parameter name is valid for the field. """
@@ -1249,7 +1254,7 @@ class BaseModel(metaclass=MetaModel):
                 for record, xid in self.env[model].browse(ids).__ensure_xml_id():
                     for i, j in xidmap.pop((record._name, record.id)):
                         lines[i][j] = xid
-            assert not xidmap, "failed to export xids for %s" % ', '.join('{}:{}' % it for it in xidmap.items())
+            assert not xidmap, "failed to export xids for %s" % ', '.join('%s:%s' % it for it in xidmap.items())
 
         if _is_toplevel_call:
             self.env.cr.cache.pop('export_properties_cache', None)
@@ -1694,6 +1699,19 @@ class BaseModel(metaclass=MetaModel):
         for fname, value in defaults.items():
             if fname in self._fields:
                 field = self._fields[fname]
+                if (
+                    field.relational
+                    and not self.env.su
+                    and isinstance(value, Iterable)
+                ):
+                    # since the value will be converted into a SET, we still
+                    # need to check permissions for these actions
+                    for cmd in value:
+                        command_code = cmd[0] if isinstance(cmd, (tuple, list)) and len(cmd) >= 2 else None
+                        if command_code == Command.DELETE:
+                            self.env[field.comodel_name].browse(cmd[1]).check_access('unlink')
+                        elif command_code == Command.UPDATE or (field.type == 'one2many' and command_code in (Command.UNLINK, Command.LINK)):
+                            self.env[field.comodel_name].browse(cmd[1]).check_access('write')
                 value = field.convert_to_cache(value, self, validate=False)
                 defaults[fname] = field.convert_to_write(value, self)
 
@@ -2096,8 +2114,9 @@ class BaseModel(metaclass=MetaModel):
             # special case for many2many fields: prepare a query on the comodel
             # in order to reuse the mechanism _apply_ir_rules, then inject the
             # query as an extra condition of the left join
-            comodel = self.env[field.comodel_name]
-            coquery = comodel._where_calc([], active_test=False)
+            codomain = field.get_domain_list(self)
+            comodel = self.env[field.comodel_name].with_context(**field.context)
+            coquery = comodel._where_calc(codomain)
             comodel._apply_ir_rules(coquery)
             # LEFT JOIN {field.relation} AS rel_alias ON
             #     alias.id = rel_alias.{field.column1}
@@ -3660,7 +3679,7 @@ class BaseModel(metaclass=MetaModel):
                     rows = self.env.execute_query(SQL('SELECT data_type FROM information_schema.columns WHERE table_name = %s AND column_name = %s', cls._table, name))
                     if rows and rows[0][0] == 'jsonb':
                         # patch the field definition by adding an override
-                        _logger.warning("Patching %s.%s with company_dependent=True", cls._name, name)
+                        _logger.debug("Patching %s.%s with company_dependent=True", cls._name, name)
                         fields_.append(type(fields_[0])(company_dependent=True))
             if len(fields_) == 1 and fields_[0]._direct and fields_[0].model_name == cls._name:
                 cls._fields[name] = fields_[0]
@@ -3992,7 +4011,7 @@ class BaseModel(metaclass=MetaModel):
             for lang, _translations in translations.items():
                 _old_translations = {src: values[lang] for src, values in old_translation_dictionary.items() if lang in values}
                 _new_translations = {**_old_translations, **_translations}
-                new_values[lang] = field.translate(_new_translations.get, old_source_lang_value)
+                new_values[lang] = field.convert_to_cache(field.translate(_new_translations.get, old_source_lang_value), self)
             self.env.cache.update_raw(self, field, [new_values], dirty=True)
 
         # the following write is incharge of
@@ -4125,6 +4144,7 @@ class BaseModel(metaclass=MetaModel):
         This method is implemented thanks to methods :meth:`_search` and
         :meth:`_fetch_query`, and should not be overridden.
         """
+        self = self._origin  # noqa: PLW0642 filtered out new records
         if not self or not field_names:
             return
 
@@ -6646,7 +6666,7 @@ class BaseModel(metaclass=MetaModel):
                             yield '$'
                         # no need to match r'.*' in else because we only use .match()
 
-                    like_regex = re.compile("".join(build_like_regex(unaccent(value), comparator.startswith("="))))
+                    like_regex = re.compile("".join(build_like_regex(unaccent(value), comparator.startswith("="))), flags=re.DOTALL)
                 if comparator in ('=', '!=') and field.type in ('char', 'text', 'html') and not value:
                     # use the comparator 'in' for falsy comparison of strings
                     comparator = 'in' if comparator == '=' else 'not in'
@@ -7370,12 +7390,13 @@ class BaseModel(metaclass=MetaModel):
             for dep in self.pool.get_dependent_fields(field.base_field)
         )
 
-    def _apply_onchange_methods(self, field_name, result):
-        """ Apply onchange method(s) for field ``field_name`` on ``self``. Value
-            assignments are applied on ``self``, while warning messages are put
-            in dictionary ``result``.
+    def _apply_onchange_methods(self, field_name, result, excluded_methods=()):
+        """ Apply onchange method(s) (not in ``excluded_methods``) for field ``field_name`` on ``self``.
+            Value assignments are applied on ``self``, while warning messages are put in dictionary ``result``.
         """
         for method in self._onchange_methods.get(field_name, ()):
+            if method in excluded_methods:
+                continue
             res = method(self)
             if not res:
                 continue
@@ -7468,9 +7489,8 @@ class TransientModel(Model):
     """ Model super-class for transient records, meant to be temporarily
     persistent, and regularly vacuum-cleaned.
 
-    A TransientModel has a simplified access rights management, all users can
-    create new records, and may only access the records they created. The
-    superuser has unrestricted access to all TransientModel records.
+    A TransientModel uses the same access rights mechanisms as a regular
+    :class:`Model`, through access control lists and record rules.
     """
     _auto = True                # automatically create database backend
     _register = False           # not visible in ORM registry, meant to be python-inherited only

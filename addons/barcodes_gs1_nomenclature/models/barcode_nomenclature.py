@@ -26,7 +26,7 @@ class BarcodeNomenclature(models.Model):
                 try:
                     re.compile("(?:%s)?" % nom.gs1_separator_fnc1)
                 except re.error as error:
-                    raise ValidationError(_("The FNC1 Separator Alternative is not a valid Regex: %(error)s", error))
+                    raise ValidationError(_("The FNC1 Separator Alternative is not a valid Regex: %(error)s", error=error))
 
     @api.model
     def gs1_date_to_date(self, gs1_date):
@@ -55,7 +55,7 @@ class BarcodeNomenclature(models.Model):
                 date = datetime.datetime.strptime(str(year) + gs1_date[2:], '%Y%m%d')
             except ValueError as e:
                 raise ValidationError(_(
-                    "A GS1 barcode nomenclature pattern was matched. However, the barcode failed to be converted to a valid date: '%(error_message)'",
+                    "A GS1 barcode nomenclature pattern was matched. However, the barcode failed to be converted to a valid date: '%(error_message)s'",
                     error_message=e
                 ))
         return date.date()

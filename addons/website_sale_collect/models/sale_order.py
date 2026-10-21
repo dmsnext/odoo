@@ -22,18 +22,22 @@ class SaleOrder(models.Model):
         for order in in_store_orders_with_pickup_data:
             order.warehouse_id = order.pickup_location_data['id']
 
-    def set_delivery_line(self, carrier, amount):
+    def _set_delivery_method(self, delivery_method, rate=None):
         """ Override of `website_sale` to recompute warehouse and fiscal position when a new
         delivery method is not in-store anymore. """
-        in_store_orders = self.filtered(
-            lambda so: (
-                so.carrier_id.delivery_type == 'in_store' and carrier.delivery_type != 'in_store'
-            )
+
+        self.ensure_one()
+        was_in_store_order = (
+            self.carrier_id.delivery_type == 'in_store'
+            and delivery_method.delivery_type != 'in_store'
         )
-        res = super().set_delivery_line(carrier, amount)
-        in_store_orders._compute_warehouse_id()
-        in_store_orders._compute_fiscal_position_id()
-        return res
+        super()._set_delivery_method(delivery_method, rate=rate)
+        if was_in_store_order:
+            fiscal_position_before = self.fiscal_position_id
+            self._compute_warehouse_id()
+            self._compute_fiscal_position_id()
+            if fiscal_position_before != self.fiscal_position_id:
+                self._recompute_taxes()
 
     def _set_pickup_location(self, pickup_location_data):
         """ Override `website_sale` to set the pickup location for in-store delivery methods.
@@ -44,6 +48,7 @@ class SaleOrder(models.Model):
         if self.carrier_id.delivery_type != 'in_store':
             return res
 
+        fiscal_position_before = self.fiscal_position_id
         self.pickup_location_data = json.loads(pickup_location_data)
         if self.pickup_location_data:
             self.warehouse_id = self.pickup_location_data['id']
@@ -53,6 +58,8 @@ class SaleOrder(models.Model):
             )
         else:
             self._compute_warehouse_id()
+        if fiscal_position_before != self.fiscal_position_id:
+            self._recompute_taxes()
 
     def _get_pickup_locations(self, zip_code=None, country=None, **kwargs):
         """ Override of `website_sale` to ensure that a country is provided when there is a zip

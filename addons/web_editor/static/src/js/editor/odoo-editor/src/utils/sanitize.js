@@ -25,12 +25,15 @@ import {
     ZERO_WIDTH_CHARS_REGEX,
     isVisible,
     cleanZWS,
+    fillEmpty,
 } from './utils.js';
 
 const NOT_A_NUMBER = /[^\d]/g;
 
 // In some cases, we want to prevent merging identical elements.
 export const UNMERGEABLE_SELECTORS = [];
+
+const FORMATTABLE_TAGS = ["SPAN", "FONT", "B", "STRONG", "I", "EM", "U", "S", "SMALL"];
 
 function hasPseudoElementContent (node, pseudoSelector) {
     const content = getComputedStyle(node, pseudoSelector).getPropertyValue('content');
@@ -78,6 +81,11 @@ export function areSimilarElements(node, node2) {
     }
     const nodeStyle = getComputedStyle(node);
     const node2Style = getComputedStyle(node2);
+    if (node.matches("code.o_inline_code")) {
+        if (nodeStyle.padding === node2Style.padding && nodeStyle.margin === node2Style.margin) {
+            return true;
+        }
+    }
     return (
         !+nodeStyle.padding.replace(NOT_A_NUMBER, '') &&
         !+node2Style.padding.replace(NOT_A_NUMBER, '') &&
@@ -204,6 +212,14 @@ function sanitizeNode(node, root) {
         const restoreCursor = shouldPreserveCursor(node, root) && preserveCursor(root.ownerDocument);
         moveNodes(...startPos(node), node.previousSibling);
         restoreCursor && restoreCursor();
+    } else if (FORMATTABLE_TAGS.includes(node.nodeName) && isRedundantElement(node)) {
+        getDeepRange(root, { select: true });
+        const restoreCursor =
+            shouldPreserveCursor(node, root) && preserveCursor(root.ownerDocument);
+        const parent = node.parentElement;
+        unwrapContents(node);
+        restoreCursor && restoreCursor();
+        node = parent; // The node has been removed, update the reference.
     } else if (node.nodeType === Node.COMMENT_NODE) {
         // Remove comment nodes to avoid issues with mso comments.
         const parent = node.parentElement;
@@ -335,6 +351,50 @@ function sanitizeNode(node, root) {
             node.remove();
             node = replacement; // The node has been removed, update the reference.
         }
+    } else if (node.nodeName === "TABLE") {
+        const table = node;
+        const matrix = [];
+        let width = 0;
+        // Build the logical matrix.
+        for (let r = 0; r < table.rows.length; r++) {
+            const row = table.rows[r];
+            matrix[r] ||= [];
+            let c = 0;
+            for (const cell of row.cells) {
+                while (matrix[r][c] !== undefined) {
+                    c++;
+                }
+                const rowspan = cell.rowSpan;
+                const colspan = cell.colSpan;
+                for (let dr = 0; dr < rowspan; dr++) {
+                    matrix[r + dr] ||= [];
+
+                    for (let dc = 0; dc < colspan; dc++) {
+                        matrix[r + dr][c + dc] = dr === 0 && dc === 0 ? cell : null;
+                    }
+                }
+                cell.removeAttribute("rowspan");
+                cell.removeAttribute("colspan");
+                c += colspan;
+                width = Math.max(width, c);
+            }
+        }
+
+        // Populate each row in place.
+        for (let r = 0; r < table.rows.length; r++) {
+            const row = table.rows[r];
+            matrix[r] ||= [];
+            let domIndex = 0;
+            for (let c = 0; c < width; c++) {
+                const entry = matrix[r][c];
+                if (!entry) {
+                    const cell = root.ownerDocument.createElement("td");
+                    fillEmpty(cell);
+                    row.insertBefore(cell, row.children[domIndex] ?? null);
+                }
+                domIndex++;
+            }
+        }
     }
     return node;
 }
@@ -401,4 +461,81 @@ export function sanitize(nodeToSanitize, root = nodeToSanitize) {
         }
     }
     return nodeToSanitize;
+}
+
+/**
+ * Checks if all classes in node are present in node2 (subset check)
+ */
+function hasClassesSubset(node, node2) {
+    const getNodeClasses = (n) => (n || "").trim().split(/\s+/).filter(Boolean);
+    const [nodeClasses, node2Classes] = [node, node2].map(getNodeClasses);
+    return nodeClasses.every((cls) => node2Classes.includes(cls));
+}
+
+/**
+ * Checks if all styles in node are present in node2 (subset check)
+ */
+function hasStylesSubset(node, node2) {
+    const getNodeStyles = (n) =>
+        (n || "")
+            .split(";")
+            .map((s) => s.trim())
+            .filter(Boolean);
+    const [nodeStyles, node2Styles] = [node, node2].map(getNodeStyles);
+    return nodeStyles.every((style) => node2Styles.includes(style));
+}
+
+/**
+ * Checks if a node is redundant based on its closest element with same tag.
+ *
+ * A node is considered redundant if:
+ * - It is an Element node with a parent.
+ * - There is a closest element with the same tag name.
+ * - All of the node's attributes are present in that closest element:
+ *   - All classes exist in the closest element's class list (subset check).
+ *   - All inline styles are present in the closest element's style attribute (subset check).
+ *   - All other attributes must have identical values.
+ *
+ * @param {Node} node - The DOM node to evaluate.
+ * @returns {boolean} True if the node is redundant, false otherwise.
+ */
+export function isRedundantElement(node) {
+    // Check for valid element node and existence of a parent.
+    if (!node || node.nodeType !== Node.ELEMENT_NODE || !node.parentElement) {
+        return false;
+    }
+
+    // Find the closest element with the same tag name.
+    const closestEl = closestElement(node.parentElement, node.tagName);
+    if (!closestEl) {
+        return false;
+    }
+
+    // Check each attribute from node.
+    for (const { name: attrName, value: nodeAttrVal } of node.attributes) {
+        const closestElAttrVal = closestEl.getAttribute(attrName);
+
+        if (!closestElAttrVal) {
+            return false; // Attribute missing in closest element.
+        }
+
+        if (attrName === "class") {
+            // All classes on the node must exist in closest element.
+            if (!hasClassesSubset(nodeAttrVal, closestElAttrVal)) {
+                return false;
+            }
+        } else if (attrName === "style") {
+            // All inline styles on the node must exist in closest element.
+            if (!hasStylesSubset(nodeAttrVal, closestElAttrVal)) {
+                return false;
+            }
+        } else {
+            // For other attributes, values must match exactly.
+            if (nodeAttrVal !== closestElAttrVal) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }

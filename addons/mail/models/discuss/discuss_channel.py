@@ -80,7 +80,6 @@ class Channel(models.Model):
     invitation_url = fields.Char('Invitation URL', compute='_compute_invitation_url')
     allow_public_upload = fields.Boolean(default=False)
     _sql_constraints = [
-        ('channel_type_not_null', 'CHECK(channel_type IS NOT NULL)', 'The channel type cannot be empty'),
         ("from_message_id_unique", "UNIQUE(from_message_id)", "Messages can only be linked to one sub-channel"),
         (
             "sub_channel_no_group_public_id",
@@ -553,16 +552,24 @@ class Channel(models.Model):
         if pids:
             email_from = tools.email_normalize(msg_vals.get('email_from') or message.email_from)
             self.env['res.partner'].flush_model(['active', 'email', 'partner_share'])
-            self.env['res.users'].flush_model(['notification_type', 'partner_id'])
+            self.env['res.users'].flush_model(['active', 'notification_type', 'partner_id', 'share'])
             sql_query = """
-                SELECT DISTINCT ON (partner.id) partner.id,
+                SELECT partner.id,
                        partner.lang,
                        partner.partner_share,
-                       users.id as uid,
-                       COALESCE(users.notification_type, 'email') as notif,
-                       COALESCE(users.share, FALSE) as ushare
+                       sub_user.uid as uid,
+                       COALESCE(sub_user.notification_type, 'email') as notif,
+                       COALESCE(sub_user.share, FALSE) as ushare
                   FROM res_partner partner
-             LEFT JOIN res_users users on partner.id = users.partner_id
+     LEFT JOIN LATERAL (
+                        SELECT users.id AS uid,
+                               users.notification_type AS notification_type,
+                               users.share AS share
+                          FROM res_users users
+                         WHERE users.partner_id = partner.id AND users.active
+                      ORDER BY users.share ASC NULLS FIRST, users.id ASC
+                         FETCH FIRST ROW ONLY
+                       ) sub_user ON TRUE
                  WHERE partner.active IS TRUE
                        AND partner.email != %s
                        AND partner.id = ANY(%s) AND partner.id != ANY(%s)"""
@@ -733,13 +740,34 @@ class Channel(models.Model):
 
     def _message_post_after_hook(self, message, msg_vals):
         """
-        Automatically set the message posted by the current user as seen for themselves.
+            - Automatically set the message posted by the current user as seen for themselves.
+            - Invite mentioned partners to sub-channel.
         """
         if (current_channel_member := self.env["discuss.channel.member"].search([
             ("channel_id", "=", self.id), ("is_self", "=", True)
         ])) and message.is_current_user_or_guest_author:
             current_channel_member._set_last_seen_message(message, notify=False)
             current_channel_member._set_new_message_separator(message.id + 1, sync=True)
+        if self.parent_channel_id and message.partner_ids:
+            members = self.env["discuss.channel.member"].search([
+                ("channel_id", "=", self.parent_channel_id.id),
+                ("partner_id", "in", message.partner_ids.ids),
+            ])
+
+            def wants_channel_notifications(partner):
+                return not partner.user_ids or any(
+                    user.res_users_settings_id.channel_notifications != "no_notif"
+                    for user in partner.user_ids
+                )
+
+            members_to_invite = members.filtered(lambda m:
+                m.custom_notifications != "no_notif" if m.custom_notifications
+                else wants_channel_notifications(m.partner_id)
+            ).partner_id
+            non_members_to_invite = (message.partner_ids - members.partner_id).filtered(
+                wants_channel_notifications
+            )
+            self._add_members(partners=members_to_invite | non_members_to_invite)
         return super()._message_post_after_hook(message, msg_vals)
 
     def _check_can_update_message_content(self, message):

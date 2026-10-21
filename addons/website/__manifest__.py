@@ -217,13 +217,14 @@
             'website/static/src/xml/website.background.video.xml',
             'website/static/src/xml/website.cookies_warning.xml',
             'website/static/src/js/text_processing.js',
-            'website/static/src/snippets/observing_cookie_mixin.js',
         ],
         'web.assets_frontend_minimal': [
             'website/static/src/js/content/inject_dom.js',
             'website/static/src/js/content/auto_hide_menu.js',
             'website/static/src/js/content/redirect.js',
             'website/static/src/js/content/adapt_content.js',
+            'website/static/src/snippets/observing_cookie_mixin.js',
+            'website/static/src/js/content/generate_video_iframe.js',
         ],
         'web.assets_frontend_lazy': [
             # Remove assets_frontend_minimal
@@ -231,6 +232,8 @@
             ('remove', 'website/static/src/js/content/auto_hide_menu.js'),
             ('remove', 'website/static/src/js/content/redirect.js'),
             ('remove', 'website/static/src/js/content/adapt_content.js'),
+            ('remove', 'website/static/src/snippets/observing_cookie_mixin.js'),
+            ('remove', 'website/static/src/js/content/generate_video_iframe.js'),
         ],
         'web._assets_primary_variables': [
             'website/static/src/scss/primary_variables.scss',
@@ -285,6 +288,7 @@
             'website/static/tests/redirect_field_tests.js',
         ],
         'web.assets_unit_tests': [
+            'website/static/tests/page_url_field.test.js',
             'website/static/tests/website_html_editor.test.js',
         ],
         'web.tests_assets': [
@@ -313,6 +317,7 @@
             'website/static/src/scss/website.wysiwyg.fonts.scss',
             'website/static/src/scss/website.wysiwyg.scss',
             'website/static/src/scss/website.edit_mode.scss',
+            'website/static/src/components/googleplaces_autocomplete/*',
             'website/static/src/js/editor/snippets.editor.js',
             'website/static/src/js/editor/snippets.options.js',
             'website/static/src/js/editor/shared_options/pricelist.js',

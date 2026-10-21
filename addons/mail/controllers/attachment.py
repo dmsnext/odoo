@@ -48,9 +48,8 @@ class AttachmentController(http.Controller):
     @http.route("/mail/attachment/upload", methods=["POST"], type="http", auth="public")
     @add_guest_to_context
     def mail_attachment_upload(self, ufile, thread_id, thread_model, is_pending=False, **kwargs):
-        thread = request.env[thread_model]._get_thread_with_access(
-            int(thread_id), mode=request.env[thread_model]._mail_post_access, **kwargs
-        )
+        post_access = request.env[thread_model].sudo()._get_mail_message_access(int(thread_id), "create")
+        thread = request.env[thread_model]._get_thread_with_access(int(thread_id), mode=post_access, **kwargs)
         if not thread:
             raise NotFound()
         if thread_model == "discuss.channel" and not thread.allow_public_upload and not request.env.user._is_internal():
@@ -61,6 +60,16 @@ class AttachmentController(http.Controller):
             "res_id": int(thread_id),
             "res_model": thread_model,
         }
+        if company_id := thread._mail_get_companies()[thread.id]:
+            vals["company_id"] = company_id.id
+        elif cids := request.cookies.get("cids", False):
+            active_company_ids = [int(cid) for cid in cids.split("-")]
+            company_id = (
+                request.env.user.company_id.id
+                if request.env.user.company_id.id in active_company_ids
+                else active_company_ids[0]
+            )
+            vals["company_id"] = company_id
         if is_pending and is_pending != "false":
             # Add this point, the message related to the uploaded file does
             # not exist yet, so we use those placeholder values instead.

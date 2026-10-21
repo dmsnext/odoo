@@ -7,6 +7,7 @@ import werkzeug.exceptions
 import werkzeug.urls
 import requests
 from os.path import join as opj
+from urllib.parse import urlparse
 
 from odoo import _, http, tools, SUPERUSER_ID
 from odoo.addons.html_editor.tools import get_video_url_data
@@ -32,10 +33,10 @@ DEFAULT_OLG_ENDPOINT = 'https://olg.api.odoo.com'
 # regex patterns in Python are slightly different from those in JavaScript.
 
 CSS_ANIMATION_RULE_REGEX = (
-        r"(?P<declaration>animation(-duration)?: .*?)"
-        + r"(?P<value>(\d+(\.\d+)?)|(\.\d+))"
-        + r"(?P<unit>ms|s)"
-        + r"(?P<separator>\s|;|\"|$)"
+        r"(?P<declaration>animation(-duration)?:\s*.*?)"
+        r"(?P<value>(\d+(\.\d+)?)|(\.\d+))"
+        r"(?P<unit>ms|s)"
+        r"(?P<separator>\s|;|\"|$)"
 )
 SVG_DUR_TIMECOUNT_VAL_REGEX = (
         r"(?P<attribute_name>\sdur=\"\s*)"
@@ -203,7 +204,7 @@ class HTML_Editor(http.Controller):
             )
         else:
             regex = r"<svg .*>"
-            declaration = f"--animation-ratio: {ratio}"
+            declaration = f"--animation_ratio: {ratio}"
             subst = ("\\g<0>\n\t<style>\n\t\t:root { \n\t\t\t" +
                      declaration +
                      ";\n\t\t}\n\t</style>")
@@ -360,6 +361,9 @@ class HTML_Editor(http.Controller):
         Creates a modified copy of an attachment and returns its image_src to be
         inserted into the DOM.
         """
+        format_error_msg = _("Uploaded image's format is not supported. Try with: %s", ', '.join(SUPPORTED_IMAGE_MIMETYPES.values()))
+        if mimetype and mimetype not in SUPPORTED_IMAGE_MIMETYPES:
+            return {'error': format_error_msg}
         self._clean_context()
         attachment = request.env['ir.attachment'].browse(attachment.id)
 
@@ -394,10 +398,16 @@ class HTML_Editor(http.Controller):
             # empty record set.
             request.env[fields['res_model']].browse(fields['res_id']).check_access('write')
 
-            # Sudo and SUPERUSER_ID because restricted editor will not be able
-            # to copy the record and the mimetype will be forced to plain text.
-            attachment = attachment.with_user(SUPERUSER_ID).sudo().copy(fields)
-            attachment = attachment.with_user(request.env.user.id).sudo(False)
+            # Sudo because restricted editor will not be able to copy the record
+            attachment = attachment.sudo().copy(fields).sudo(False)
+            # Override mimetype with SUPERUSER if it was forced to plain text
+            if attachment.mimetype == 'text/plain' != fields['mimetype']:
+                mimetype_exempt = any(
+                    request.env.user.has_group(group) for group in attachment._get_mimetype_exempt_groups()
+                )
+                if not mimetype_exempt:
+                    request.env['ir.ui.view'].sudo(False).check_access_rights('write')
+                attachment.with_user(SUPERUSER_ID).mimetype = fields['mimetype']
 
         if alt_data:
             for size, per_type in alt_data.items():
@@ -540,6 +550,8 @@ class HTML_Editor(http.Controller):
 
     @http.route(["/web_editor/generate_text", "/html_editor/generate_text"], type="json", auth="user")
     def generate_text(self, prompt, conversation_history):
+        if not request.env.user._is_internal():
+            raise AccessError(_("Only internal users can use AI text generation."))
         try:
             IrConfigParameter = request.env['ir.config_parameter'].sudo()
             olg_api_endpoint = IrConfigParameter.get_param('web_editor.olg_api_endpoint', DEFAULT_OLG_ENDPOINT)
@@ -589,7 +601,24 @@ class HTML_Editor(http.Controller):
         try:
             Actions = request.env['ir.actions.actions']
             context = dict(request.env.context)
-            words = preview_url.strip('/').split('/')
+            parsed_preview_url = urlparse(preview_url)
+            words = parsed_preview_url.path.strip('/').split('/')
+            last_segment = words[-1]
+
+            if not (
+                last_segment.isnumeric()
+                and (
+                    parsed_preview_url.path.startswith("/odoo")
+                    or parsed_preview_url.path.startswith("/web")
+                    or parsed_preview_url.path.startswith("/@/")
+                )
+            ):
+                # this could be a frontend or an external page
+                link_preview_data = self.link_preview_metadata(preview_url)
+                result = {}
+                if link_preview_data and link_preview_data.get('og_description'):
+                    result['description'] = link_preview_data['og_description']
+                return result
 
             record_id = int(words.pop())
             action_name = words.pop()
@@ -604,20 +633,22 @@ class HTML_Editor(http.Controller):
                 action_type = action.type
                 if action_type != 'ir.actions.act_window':
                     return {'other_error_msg': _("Action %s is not a window action, link preview is not available", action_name)}
-                action = request.env[action_type].browse(action.id)
+                action_sudo = request.env[action_type].sudo().browse(action.id)
 
-                model = request.env[action.res_model].with_context(context)
+                model = request.env[action_sudo.res_model].with_context(context)
 
             record = model.browse(record_id)
 
-            result = {}
-            if 'description' in record:
-                result['description'] = html.fromstring(record.description).text_content() if record.description else ""
+            description_field = 'description' if 'description' in record else None
+            name_field = 'link_preview_name' if 'link_preview_name' in record else 'display_name'
 
-            if 'link_preview_name' in record:
-                result['link_preview_name'] = record.link_preview_name
-            elif 'display_name' in record:
-                result['display_name'] = record.display_name
+            record.read([field for field in (description_field, name_field) if field])
+
+            result = {name_field: record[name_field]}
+
+            if description_field:
+                description = record[description_field]
+                result[description_field] = html.fromstring(description).text_content() if description else ""
 
             return result
         except (MissingError) as e:

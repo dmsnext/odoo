@@ -1,9 +1,10 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import re
-from datetime import datetime
 
+from datetime import datetime
 from pytz import UTC
+from lxml import etree
 
 from odoo import _, api, models
 from odoo.addons.account_edi_ubl_cii.models.account_edi_xml_ubl_20 import UBL_NAMESPACES
@@ -135,26 +136,97 @@ class AccountEdiXmlUBLMyInvoisMY(models.AbstractModel):
         ]
         vals['vals']['accounting_customer_party_vals']['party_vals']['party_identification_vals'] = customer_identification_vals
 
+        prepaid_amount = self._l10n_my_edi_get_prepaid_amount(invoice)
+        vals['vals'].update({
+            'prepaid_payment_vals': {
+                'currency': invoice.currency_id,
+                'currency_dp': self._get_currency_decimal_places(invoice.currency_id),
+                'amount': prepaid_amount,
+            },
+        })
+        # The base implementation ('account.edi.xml.ubl_20') sets payable_amount to invoice.amount_residual, which
+        # doesn't account for our date-based prepaid_amount above. Override it so PayableAmount stays consistent.
+        vals['vals']['monetary_total_vals']['payable_amount'] = invoice.amount_total - prepaid_amount
+
         # Debit/Credit note original invoice ref.
         # Applies to credit notes, debit notes, refunds for both invoices and self-billed invoices.
         # The original document is mandatory; but in some specific cases it will be empty (sending a credit note for an invoice
         # managed outside Odoo/...)
         if document_type_code in ('02', '03', '04', '12', '13', '14'):
+            original_document_id = None
+            if original_document:
+                if original_document.l10n_my_edi_file_id:
+                    decoded_vals = self._decode_myinvois_attachment(original_document.l10n_my_edi_file_id)
+                    original_document_id = decoded_vals.get('original_document_id')
+                if not original_document_id and self._is_self_billed(document_type_code) and original_document.ref:
+                    original_document_id = original_document.ref
+                if not original_document_id:
+                    original_document_id = original_document.name
+
             vals['vals'].update({
                 'billing_reference_vals': {
-                    'id': (original_document and original_document.name) or 'NA',
+                    'id': original_document_id or 'NA',
                     'uuid': (original_document and original_document.l10n_my_edi_external_uuid) or 'NA',
                 },
             })
 
-        vals['vals'].update({
-            'prepaid_payment_vals': {
-                'currency': invoice.currency_id,
-                'currency_dp': self._get_currency_decimal_places(invoice.currency_id),
-                'amount': invoice.amount_total - invoice.amount_residual,
-            },
-        })
+            # For credit, debit, refund notes, and their self-billed variants,
+            # the PrepaidPayment amount must be set to 0. This ensures the PayableAmount reflects the full refund/adjustment
+            # amount without being reduced by the prepayment, as per MyInvois specifications.
+            vals['vals'].get('monetary_total_vals', {})['payable_amount'] = invoice.amount_total
+            vals['vals']['prepaid_payment_vals']['amount'] = 0
 
+        return vals
+
+    def _l10n_my_edi_get_prepaid_amount(self, invoice):
+        """ Compute the amount of the invoice that was genuinely paid in advance.
+
+        LHDN only recognizes a reconciled payment as a deposit/prepayment if it was made strictly before the
+        invoice date; a payment made on or after the invoice date is a regular settlement, not a prepayment.
+        Additionally, LHDN never accepts a PayableAmount of 0, so a 100% advance payment must not be reported
+        as a prepayment either: in that case, the full invoice amount is reported as payable instead.
+        Credit/debit notes reconciled against the invoice are not prepayments.
+        """
+        if not invoice.invoice_date:
+            return 0.0
+
+        invoice_partials, exchange_diff_moves = invoice._get_reconciled_invoices_partials()
+        prepaid_amount = sum(
+            amount
+            for partial, amount, aml in invoice_partials
+            if (
+                aml.move_id.id not in exchange_diff_moves
+                and aml.move_id.move_type not in ('out_refund', 'in_refund')
+                and aml.date and aml.date < invoice.invoice_date
+            )
+        )
+        if invoice.currency_id.compare_amounts(prepaid_amount, invoice.amount_total) >= 0:
+            return 0.0
+        return prepaid_amount
+
+    def _decode_myinvois_attachment(self, attachment):
+        """ Extract data from MyInvois xml. """
+        def get_node(node, xpath):
+            nodes = node.xpath(xpath)
+            return nodes[0] if nodes else None
+
+        def get_value(node):
+            if node is None:
+                return None
+            return node.text
+
+        vals = {}
+        try:
+            root = etree.fromstring(attachment.raw)
+            invoice_id_node = get_node(root, "//*[local-name()='Invoice']/*[local-name()='ID']")
+        except etree.XMLSyntaxError:
+            # Not an xml
+            return {}
+        except AttributeError:
+            # Not a MyInvois xml
+            return {}
+
+        vals['original_document_id'] = get_value(invoice_id_node)
         return vals
 
     def _get_delivery_vals_list(self, invoice):
@@ -198,14 +270,11 @@ class AccountEdiXmlUBLMyInvoisMY(models.AbstractModel):
             if (
                 partner._l10n_my_edi_get_tin_for_myinvois() == 'EI00000000010'
                 and partner.l10n_my_identification_number == 'NA'
-            ):
-                # Special case for consolidated entities (e.g., general public).
-                # When TIN is 'EI00000000010' and Identification Number is 'NA', MyInvois requires
-                # the CountrySubentityCode to be fixed as '17' regardless of the actual state.
+            ) or partner.country_id.code != 'MY':
+                # Special case for consolidated entities (e.g., general public) and non-Malaysian partners:
+                # MyInvois requires the CountrySubentityCode to be fixed as '17' ("not applicable") since
+                # Malaysian state codes don't apply to them.
                 subentity_code = '17'
-            elif partner.country_id.code != 'MY':
-                # For non-Malaysian partners return the state name instead of state code
-                subentity_code = partner.state_id.name
             else:
                 # Get the subentity code for the partner, based on its state.
                 subentity_code = partner.state_id.code

@@ -302,6 +302,8 @@ export class Thread extends Record {
         },
     });
     hasLoadingFailed = false;
+    /** @type {Error} */
+    hasLoadingFailedError;
     canPostOnReadonly;
     /** @type {luxon.DateTime} */
     last_interest_dt = Record.attr(undefined, { type: "datetime" });
@@ -338,7 +340,9 @@ export class Thread extends Record {
     /** @type {integer|null} */
     highlightMessage = Record.one("Message", {
         onAdd(msg) {
-            msg.thread = this;
+            if (!msg.thread) {
+                msg.thread = this;
+            }
         },
     });
     /** @type {String|undefined} */
@@ -402,6 +406,10 @@ export class Thread extends Record {
         );
     }
 
+    get canPostMessage() {
+        return this.hasWriteAccess || (this.hasReadAccess && this.canPostOnReadonly);
+    }
+
     get hasAttachmentPanel() {
         return this.model === "discuss.channel";
     }
@@ -434,7 +442,7 @@ export class Thread extends Record {
     }
 
     computeCorrespondent() {
-        if (this.channel_type === "channel") {
+        if (["channel", "group"].includes(this.channel_type)) {
             return undefined;
         }
         const correspondents = this.correspondents;
@@ -596,7 +604,7 @@ export class Thread extends Record {
                 return;
             }
             const otherMembers = this.channelMembers.filter((member) =>
-                member.persona.notEq(this.store.self)
+                member.notEq(this.selfMember)
             );
             if (otherMembers.length === 0) {
                 return;
@@ -676,11 +684,13 @@ export class Thread extends Record {
         }
         try {
             const { data, messages } = await this.fetchMessagesData({ after, around, before });
+            this.hasLoadingFailedError = undefined;
             this.store.insert(data, { html: true });
             this.hasLoadingFailed = false;
             return this.store.Message.insert(messages.reverse());
         } catch (e) {
             this.hasLoadingFailed = true;
+            this.hasLoadingFailedError = e;
             throw e;
         } finally {
             this.isLoaded = true;
@@ -876,7 +886,12 @@ export class Thread extends Record {
         try {
             this.isLoaded = false;
             this.scrollTop = undefined;
-            this.messages = await this.fetchMessages({ around: messageId });
+            const knownMessages = [...this.messages];
+            const fetched = await this.fetchMessages({ around: messageId });
+            const receivedMessages = this.messages.filter((message) =>
+                message.notIn(knownMessages)
+            );
+            this.messages = fetched;
             this.isLoaded = true;
             this.loadNewer = messageId !== undefined ? true : false;
             this.loadOlder = true;
@@ -893,6 +908,13 @@ export class Thread extends Record {
                 }
             }
             this._enrichMessagesWithTransient();
+            if (!this.loadNewer) {
+                const missingMessages = receivedMessages.filter((message) =>
+                    message.notIn(this.messages)
+                );
+                this.messages.push(...missingMessages);
+                this.messages.sort((m1, m2) => m1.id - m2.id);
+            }
         } catch {
             // handled in fetchMessages
         }
