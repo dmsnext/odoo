@@ -216,7 +216,11 @@ class AssetsBundle(object):
         Not really a full checksum.
         We compute a SHA512/256 on the rendered bundle + combined linked files last_modified date
         """
-        check = u"%s%s" % (json.dumps(self.files, sort_keys=True), self.last_modified_combined)
+        # Erpiant: senza il percorso assoluto ('filename'), che cambia da una
+        # macchina all'altra: i bundle precompilati nel DB template (Linux) devono
+        # avere la stessa versione sul PC del cliente (C:\Program Files\...).
+        files = [{k: v for k, v in f.items() if k != 'filename'} for f in self.files]
+        check = u"%s%s" % (json.dumps(files, sort_keys=True), self.last_modified_combined)
         return hashlib.sha512(check.encode('utf-8')).hexdigest()[:64]
 
     def _get_asset_template_url(self):
@@ -964,7 +968,10 @@ class WebAsset(object):
         try:
             self.stat()
             if self._filename:
-                return datetime.fromtimestamp(os.path.getmtime(self._filename))
+                # Erpiant: UTC come il resto dell'ORM. Su Linux non cambia nulla
+                # (odoo/__init__.py forza TZ=UTC), su Windows tzset non esiste e
+                # fromtimestamp darebbe l'ora locale: versione diversa dal template.
+                return datetime.utcfromtimestamp(os.path.getmtime(self._filename))
             elif self._ir_attach:
                 return self._ir_attach['__last_update']
         except Exception:
