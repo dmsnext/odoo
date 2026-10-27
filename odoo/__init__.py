@@ -78,3 +78,6 @@ from odoo.fields import Command
 # ----------------------------------------------------------
 from . import cli
 from . import http
+
+# Nessuna chiamata verso i servizi esterni di odoo.com (vedi il modulo)
+from .tools import no_odoo_calls
